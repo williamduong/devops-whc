@@ -2,7 +2,7 @@
 
 WHC cPanel MCP server for deploy, verify, rollback, logs, backup, and health flows.
 
-Current release: 1.0.1
+Current workspace version: 1.0.2-next
 
 ## Publish Package Layout
 
@@ -186,12 +186,6 @@ npm run mcp:prepare
 
 This initializes the hidden project state under `.mcp/whc-mcp` and ensures the workspace ignores local management files.
 
-## Why This Deployment Flow
-
-- WHC staging is clone/sync-first in real operations, so the flow matches the platform behavior.
-- The server supports both managed sync and git-controlled delivery to fit different project shapes.
-- Safety gates (prepare, verify, rollback, explicit confirmations) reduce live-site risk during releases.
-
 ## Safety Notes
 
 1. Never commit `.env` or `.vscode/whc.env`.
@@ -203,11 +197,13 @@ This initializes the hidden project state under `.mcp/whc-mcp` and ensures the w
 
 1. `npm run test`
 2. `npm run pack:check`
-3. `npm --prefix packages/devops-whc publish`
+3. `npm run publish:npm`
 
 Notes:
 1. `npm run pack:check` automatically runs publish preparation and packs from `packages/devops-whc`.
-2. Do not publish from the repository root package.
+2. `npm run publish:npm` runs the real publish from `packages/devops-whc`.
+3. For prerelease versions like `1.0.2-next`, `npm run publish:npm` automatically publishes with dist-tag `next`.
+4. Do not run `npm publish` from the repository root package.
 
 ## License
 

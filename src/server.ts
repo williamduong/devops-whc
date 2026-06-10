@@ -53,7 +53,7 @@ export function createMcpServer(): McpServer {
   const instanceName = (process.env.WHC_MCP_INSTANCE_NAME ?? "").trim() || "whc-mcp";
   const server = new McpServer({
     name: instanceName,
-    version: "1.0.1",
+    version: "1.0.2-next",
   });
 
   // ── whc_prepare ───────────────────────────────────────────────────────────

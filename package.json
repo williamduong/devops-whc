@@ -1,6 +1,6 @@
 {
   "name": "devops-whc-workspace",
-  "version": "1.0.1",
+  "version": "1.0.2-next",
   "description": "WHC cPanel MCP server for deploy, verify, and rollback flows",
   "private": true,
   "main": "dist/index.js",
@@ -29,6 +29,7 @@
     "lint": "eslint . --ext .ts",
     "prepack": "npm run build",
     "publish:prepare": "node scripts/prepare-publish-package.cjs",
+    "publish:npm": "node scripts/publish-publish-package.cjs",
     "pack:check": "node scripts/pack-publish-package.cjs",
     "pack:check:root": "npm pack --dry-run",
     "dev": "tsx src/index.ts",

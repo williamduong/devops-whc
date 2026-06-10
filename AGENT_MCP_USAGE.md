@@ -85,10 +85,12 @@ Release commands:
 
 ```powershell
 npm run pack:check
-npm --prefix packages/devops-whc publish
+npm run publish:npm
 ```
 
 `npm run pack:check` will run publish preparation and package dry-run against the subpackage.
+`npm run publish:npm` runs `npm publish` from the publish subpackage.
+For prerelease versions, `npm run publish:npm` automatically adds `--tag next` unless an explicit tag is provided.
 
 ## 2.1 Why `whc_setup_remote` Exists
 
