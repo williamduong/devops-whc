@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local environment and secrets
+.env
+.env.local
+.env.*.local
+.vscode/whc.env
+
+# MCP local state
+.mcp/
+
+# Temporary and logs
+.tmp/
+tmp/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# npm pack artifacts
+*.tgz
+
+# Generated publish subpackage artifacts
+packages/devops-whc/dist/
+packages/devops-whc/scripts/
+packages/devops-whc/README.md
+packages/devops-whc/AGENT_MCP_USAGE.md
+packages/devops-whc/WHC_MCP_REQUIREMENTS.md
+packages/devops-whc/LICENSE

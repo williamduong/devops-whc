@@ -1,0 +1,179 @@
+import { describe, expect, it } from "vitest";
+import { runDeployRollback, runDeployVerification } from "../src/services/deploy-runtime-ops";
+import { WhcSshClient } from "../src/clients/ssh-client";
+import { WhcUapiClient } from "../src/clients/whc-uapi-client";
+
+const baseConfig = {
+  apiToken: "token",
+  user: "user",
+  host: "host.example.com",
+  apiBaseUrl: "https://host.example.com:2083",
+  workflowMode: "git_controlled" as const,
+  domains: { primary: "example.com" },
+  paths: { prod: "/home/prod/public_html" },
+  sourceProfile: {
+    sourceKind: "full_site" as const,
+    deployUnit: "raw_source" as const,
+    defaultReleaseIntent: "deploy" as const,
+  },
+  safety: { requireStagingConfirm: true, warnDynamicDataSync: true },
+  sshTargets: {
+    prod: { host: "srv44.swhc.ca", port: 27, username: "bbcyvf27", privateKeyPath: "C:/fake/key" },
+  },
+  apiTimeoutMs: 15000,
+  sshTimeoutMs: 10000,
+};
+
+const baseRequest = {
+  request_id: "req-1",
+  actor: { kind: "copilot" as const },
+  confirmed: true,
+  idempotency_key: "idem-1",
+  payload: {
+    workflow_mode: "git_controlled" as const,
+    target_environment: "live" as const,
+    release_intent: "deploy" as const,
+    pipeline_id: "P3" as const,
+    source_profile: { source_kind: "full_site" as const, deploy_unit: "raw_source" as const },
+    repository_root: "/home/prod/public_html",
+    branch: "main",
+  },
+};
+
+function mockSsh(stdout: string, ok = true): WhcSshClient {
+  return {
+    execWithKey: async () => ({
+      ok,
+      latencyMs: 10,
+      stdout,
+      stderr: "",
+      message: ok ? "ok" : "ssh failed",
+    }),
+  } as unknown as WhcSshClient;
+}
+
+function mockUapi(ok = true): WhcUapiClient {
+  return {
+    triggerDeployment: async () => ({
+      ok,
+      latencyMs: 10,
+      deployment_id: ok ? "dep-rollback" : undefined,
+      message: ok ? "rollback ok" : "rollback failed",
+    }),
+  } as unknown as WhcUapiClient;
+}
+
+function mockSshWithCommandCapture(
+  stdout: string,
+  commandLog: string[],
+  ok = true,
+): WhcSshClient {
+  return {
+    execWithKey: async (_target: unknown, command: string) => {
+      commandLog.push(command);
+      return {
+        ok,
+        latencyMs: 10,
+        stdout,
+        stderr: "",
+        message: ok ? "ok" : "ssh failed",
+      };
+    },
+  } as unknown as WhcSshClient;
+}
+
+describe("runDeployVerification", () => {
+  it("passes when path and .cpanel.yml checks pass", async () => {
+    const result = await runDeployVerification(
+      baseConfig,
+      baseRequest,
+      mockSsh("__PATH_OK__\n__CPANEL_YML_OK__\n__WP_OK__\n"),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("fails when deployment path is missing", async () => {
+    const result = await runDeployVerification(
+      baseConfig,
+      baseRequest,
+      mockSsh("__PATH_MISSING__\n"),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/path does not exist/i);
+  });
+
+  it("fails for full_site when WP-CLI is missing", async () => {
+    const result = await runDeployVerification(
+      baseConfig,
+      baseRequest,
+      mockSsh("__PATH_OK__\n__CPANEL_YML_OK__\n__WPCLI_MISSING__\n"),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/WP-CLI is required/i);
+  });
+
+  it("skips WP-CLI check for package_only", async () => {
+    const commandLog: string[] = [];
+    const result = await runDeployVerification(
+      baseConfig,
+      {
+        ...baseRequest,
+        payload: {
+          ...baseRequest.payload,
+          source_profile: {
+            source_kind: "package_only",
+            deploy_unit: "package_bundle",
+          },
+        },
+      },
+      mockSshWithCommandCapture("__PATH_OK__\n__CPANEL_YML_OK__\n", commandLog),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(commandLog[0]).not.toContain("wp core is-installed");
+  });
+
+  it("skips WP-CLI check for artifact_first", async () => {
+    const commandLog: string[] = [];
+    const result = await runDeployVerification(
+      baseConfig,
+      {
+        ...baseRequest,
+        payload: {
+          ...baseRequest.payload,
+          source_profile: {
+            source_kind: "artifact_first",
+            deploy_unit: "build_artifact",
+          },
+        },
+      },
+      mockSshWithCommandCapture("__PATH_OK__\n__CPANEL_YML_OK__\n", commandLog),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(commandLog[0]).not.toContain("wp core is-installed");
+  });
+});
+
+describe("runDeployRollback", () => {
+  it("fails when rollback_branch is missing", async () => {
+    const result = await runDeployRollback(baseConfig, baseRequest, mockUapi(true));
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/rollback_branch/i);
+  });
+
+  it("triggers rollback deployment when rollback_branch is provided", async () => {
+    const result = await runDeployRollback(
+      baseConfig,
+      {
+        ...baseRequest,
+        payload: {
+          ...baseRequest.payload,
+          rollback_branch: "main",
+        },
+      },
+      mockUapi(true),
+    );
+    expect(result.ok).toBe(true);
+  });
+});

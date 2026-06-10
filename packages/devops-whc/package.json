@@ -1,0 +1,48 @@
+{
+  "name": "devops-whc",
+  "version": "1.0.1",
+  "description": "WHC cPanel MCP server for deploy, verify, and rollback flows",
+  "main": "dist/index.js",
+  "bin": {
+    "whc-mcp": "dist/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "scripts/start-mcp.cjs",
+    "scripts/prepare-first-time.cjs",
+    "README.md",
+    "AGENT_MCP_USAGE.md",
+    "WHC_MCP_REQUIREMENTS.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node ../../scripts/prepare-publish-package.cjs",
+    "pack:check": "npm pack --dry-run",
+    "prehelp": "node ../../scripts/prepare-publish-package.cjs",
+    "help": "node dist/index.js --help",
+    "preserve": "node ../../scripts/prepare-publish-package.cjs",
+    "serve": "node dist/index.js --serve",
+    "preprobe": "node ../../scripts/prepare-publish-package.cjs",
+    "probe": "node dist/index.js --probe",
+    "precheck:health": "node ../../scripts/prepare-publish-package.cjs",
+    "check:health": "node dist/index.js --check-health"
+  },
+  "keywords": [
+    "mcp",
+    "whc",
+    "cpanel",
+    "deploy"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^17.4.2",
+    "ssh2": "^1.17.0",
+    "zod": "^4.4.3"
+  }
+}
