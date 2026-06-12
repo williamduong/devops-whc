@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
-export const DEFAULT_STATE_ROOT = ".mcp/whc-mcp";
+export const DEFAULT_STATE_ROOT = ".whc";
 
 type WriteTrackInput = {
   rootDir: string;
@@ -37,7 +37,7 @@ export function ensureWorkspaceState(rootDir = process.cwd()): void {
   mkdirSync(logsDir, { recursive: true });
   mkdirSync(envDir, { recursive: true });
 
-  ensureGitignoreRule(rootDir, ".mcp/");
+  ensureGitignoreRule(rootDir, ".whc/");
 }
 
 export function writePipelineStartState(input: WriteTrackInput): void {
@@ -148,7 +148,7 @@ function defaultNextStep(ok: boolean): string {
   if (ok) {
     return "Proceed to next pipeline step based on policy and verification scope.";
   }
-  return "Inspect .mcp/whc-mcp/logs/flow-events.jsonl and retry after fixing the reported error.";
+  return "Inspect .whc/logs/flow-events.jsonl and retry after fixing the reported error.";
 }
 
 export function resolveStateRoot(rootDir = process.cwd()): string {

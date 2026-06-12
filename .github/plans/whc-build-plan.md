@@ -1,11 +1,11 @@
-# WHC MCP Build Plan (Detailed)
+# WHC CLI Build Plan (Detailed)
 
 Status: active
 Owner: devops-whc
 Last updated: 2026-06-10
 
 ## 1) Delivery Objective
-Ship a production-ready MCP server for WHC cPanel operations with a generic orchestration core, a WHC adapter layer, safe Local -> Target workflows, and strong operational guardrails.
+Ship a production-ready tool server for WHC cPanel operations with a generic orchestration core, a WHC adapter layer, safe Local -> Target workflows, and strong operational guardrails.
 
 Success criteria:
 1. All 6 MVP tools implemented and tested.
@@ -23,7 +23,7 @@ In scope (MVP):
 4. whc_get_logs
 5. whc_db_backup
 6. whc_check_health
-Ship a production-ready MCP server for WHC cPanel operations with safe Local -> Staging -> Production workflows and strong operational guardrails.
+Ship a production-ready tool server for WHC cPanel operations with safe Local -> Staging -> Production workflows and strong operational guardrails.
 Out of scope (post-MVP):
 1. Advanced dashboard UI.
 2. Fully automated managed sync reverse rollback.
@@ -32,9 +32,9 @@ Out of scope (post-MVP):
 ## 2.1) WHC Environment Semantics (Critical)
 1. WHC Managed WordPress staging is created from Live first.
 2. Deployment lifecycle is clone/sync oriented, not strict isolated CI pipeline.
-3. The MCP must support both workflow modes:
+3. The tool server must support both workflow modes:
    - managed_clone_sync: Live -> Staging clone, Staging -> Live push.
-   - git_controlled: Git repository deploy to target path via cPanel/SSH.
+   - SSH/SCP file transfer + WP-CLI: direct file delivery to target path.
 4. Tool outputs must include workflow mode and target environment metadata.
 
 ## 2.2) Generic Deployment Abstractions (Critical)
@@ -68,7 +68,7 @@ Rules:
 
 ### Phase 0 - Project Bootstrap
 Deliverables:
-1. TypeScript Node.js MCP skeleton.
+1. TypeScript Node.js tool server skeleton.
 2. Source layout and module boundaries.
 3. Initial scripts: build, test, typecheck, lint.
 
@@ -151,7 +151,7 @@ Tasks by tool:
    - Normalize project source, release intent, and target mapping.
    - Invoke the correct delivery mechanism for the chosen workflow mode.
    - Validate source/target mapping, branch or artifact target, and direction/scope where applicable.
-   - Apply workflow-mode-specific rules (`managed_clone_sync` vs `git_controlled`).
+   - Apply workflow-mode-specific rules ((`managed_clone_sync`)).
 3. whc_ssh_exec
    - Execute safe command set via SSH.
    - Block denied command patterns by policy.
@@ -213,7 +213,7 @@ Deliverables:
 3. Runbook for common failure recovery.
 
 Tasks:
-1. Document MCP server registration and required env.
+1. Document tool server registration and required env.
 2. Provide sample command flows for staging/prod deploy.
 3. Provide troubleshooting quick-reference.
 
@@ -348,3 +348,5 @@ Next top 3 tasks:
 1. Implement control plane orchestration wrapper (preflight schema + policy + idempotency + audit).
 2. Add schema definitions for first real tool payloads (`whc_check_health`, `whc_setup_remote`).
 3. Start Phase 3 with `whc_check_health` as first production handler.
+
+

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { executeWhcDeploy, resolveDeploySafetyLevel } from "../src/handlers/whc-deploy";
 import { validateWhcDeployRequest } from "../src/schemas/whc-deploy";
-import { WhcUapiClient, UapiTriggerDeploymentResult } from "../src/clients/whc-uapi-client";
+import { WhcUapiClient } from "../src/clients/whc-uapi-client";
 import { InMemoryDeploymentLockService } from "../src/services/deployment-locks";
 
 const baseConfig = {
@@ -9,7 +9,7 @@ const baseConfig = {
   user: "bbcyvf27",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: { primary: "example.com" },
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {
@@ -21,7 +21,6 @@ const baseConfig = {
     requireStagingConfirm: true,
     warnDynamicDataSync: true,
     enforceStagingFirst: false,
-    allowStagingGitControlled: false,
   },
   sshTargets: {
     prod: { host: "srv44.swhc.ca", port: 27, username: "bbcyvf27", privateKeyPath: "C:/fake/key" },
@@ -32,11 +31,8 @@ const baseConfig = {
 
 const sourceProfile = { source_kind: "full_site" as const, deploy_unit: "raw_source" as const };
 
-function mockUapiClient(deploy?: UapiTriggerDeploymentResult): WhcUapiClient {
-  return {
-    triggerDeployment: async () =>
-      deploy ?? { ok: true, latencyMs: 5, deployment_id: "dep-123", message: "triggered" },
-  } as unknown as WhcUapiClient;
+function mockUapiClient(): WhcUapiClient {
+  return {} as unknown as WhcUapiClient;
 }
 
 describe("whc_deploy schema", () => {
@@ -45,7 +41,7 @@ describe("whc_deploy schema", () => {
       validateWhcDeployRequest({
         request_id: "r1",
         actor: { kind: "copilot" },
-        payload: { workflow_mode: "git_controlled", target_environment: "live", release_intent: "deploy", pipeline_id: "P3", source_profile: sourceProfile, repository_root: "/home/test" },
+        payload: { workflow_mode: "managed_clone_sync", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging" },
       }),
     ).toThrow(/VALIDATION_ERROR/);
   });
@@ -90,7 +86,7 @@ describe("executeWhcDeploy", () => {
         dry_run: true,
         confirmed: true,
         idempotency_key: "idem-1",
-        payload: { workflow_mode: "git_controlled", target_environment: "live", release_intent: "deploy", pipeline_id: "P3", source_profile: sourceProfile, repository_root: "/home/test" },
+        payload: { workflow_mode: "managed_clone_sync", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
       },
       { uapiClient: mockUapiClient() },
     );
@@ -98,60 +94,6 @@ describe("executeWhcDeploy", () => {
     expect(result.data?.outcome).toBe("dry_run_preview");
     expect(result.data?.pipeline_status).toBe("pass_partial");
     expect(result.data?.phase_coverage.deployment_state).toBe("excluded");
-  });
-
-  it("triggers UAPI deployment for git_controlled mode", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r1",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-1",
-        payload: { workflow_mode: "git_controlled", target_environment: "live", release_intent: "deploy", pipeline_id: "P3", source_profile: sourceProfile, repository_root: "/home/bbcyvf27/public_html", branch: "main" },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-    expect(result.ok).toBe(true);
-    expect(result.data?.outcome).toBe("deployed");
-    expect(result.data?.deployment_id).toBe("dep-123");
-    expect(result.data?.pipeline_status).toBe("pass_partial");
-    expect(result.data?.phase_coverage.code_state).toBe("included");
-    expect(result.data?.phase_coverage.data_state).toBe("excluded");
-  });
-
-  it("blocks direct live deploy in git_controlled mode when staging-first policy is enabled", async () => {
-    const configEnforced = {
-      ...baseConfig,
-      safety: {
-        ...baseConfig.safety,
-        enforceStagingFirst: true,
-      },
-    };
-
-    const result = await executeWhcDeploy(
-      configEnforced,
-      {
-        request_id: "r-live-git-block",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-live-git-block",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "live",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    expect(result.error?.message).toMatch(/Staging-first policy/);
   });
 
   it("blocks live target unless flow is managed promote staging_to_live", async () => {
@@ -218,216 +160,6 @@ describe("executeWhcDeploy", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.outcome).toBe("synced_staging_to_live");
-  });
-
-  it("returns error if git_controlled missing repository_root", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r1",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-1",
-        payload: { workflow_mode: "git_controlled", target_environment: "live", release_intent: "deploy", pipeline_id: "P3", source_profile: sourceProfile },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("VALIDATION_ERROR");
-  });
-
-  it("blocks git_controlled staging deploy when server workflow mode is managed_clone_sync", async () => {
-    const configManagedMode = {
-      ...baseConfig,
-      workflowMode: "managed_clone_sync" as const,
-    };
-
-    const result = await executeWhcDeploy(
-      configManagedMode,
-      {
-        request_id: "r-mode-lock",
-        actor: { kind: "copilot" },
-        dry_run: true,
-        confirmed: true,
-        idempotency_key: "idem-mode-lock",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "staging",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    expect(result.error?.message).toMatch(/Server mode lock/);
-    expect(result.error?.message).toMatch(/managed_clone_sync/);
-  });
-
-  it("allows git_controlled staging deploy when override is enabled", async () => {
-    const configManagedModeOverride = {
-      ...baseConfig,
-      workflowMode: "managed_clone_sync" as const,
-      safety: {
-        ...baseConfig.safety,
-        allowStagingGitControlled: true,
-      },
-    };
-
-    const result = await executeWhcDeploy(
-      configManagedModeOverride,
-      {
-        request_id: "r-mode-lock-override",
-        actor: { kind: "copilot" },
-        dry_run: true,
-        confirmed: true,
-        idempotency_key: "idem-mode-lock-override",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "staging",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.data?.outcome).toBe("dry_run_preview");
-  });
-
-  it("blocks git_controlled staging deploy when path owner mismatches and explains cross-account limitation", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r-owner-mismatch",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-owner-mismatch",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "staging",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/stag290886/public_html",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    expect(result.error?.message).toMatch(/Path owner mismatch/);
-    // Must explain the cross-account UAPI limitation for staging, not just suggest wrong live path
-    expect(result.error?.message).toMatch(/separate-account staging|managed_clone_sync/);
-    // Must NOT suggest target_environment=live as the solution when the intent was staging
-    expect(result.error?.message).not.toMatch(/"target_environment":\s*"live"/);
-  });
-
-  it("blocks git_controlled staging deploy when repository_root mismatches configured WHC_STAGING_PATH", async () => {
-    const configWithStagingPath = {
-      ...baseConfig,
-      paths: {
-        ...baseConfig.paths,
-        staging: "/home/stag290886/public_html",
-      },
-    };
-
-    const result = await executeWhcDeploy(
-      configWithStagingPath,
-      {
-        request_id: "r-staging-path-mismatch",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-staging-path-mismatch",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "staging",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    expect(result.error?.message).toMatch(/Invalid staging target for git_controlled deploy/);
-    expect(result.error?.message).toMatch(/WHC_STAGING_PATH/);
-  });
-
-  it("allows git_controlled staging dry-run when repository_root matches WHC_STAGING_PATH", async () => {
-    const configWithStagingPath = {
-      ...baseConfig,
-      paths: {
-        ...baseConfig.paths,
-        staging: "/home/bbcyvf27/staging-public",
-      },
-    };
-
-    const result = await executeWhcDeploy(
-      configWithStagingPath,
-      {
-        request_id: "r-staging-path-ok",
-        actor: { kind: "copilot" },
-        dry_run: true,
-        confirmed: true,
-        idempotency_key: "idem-staging-path-ok",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "staging",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/staging-public",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.data?.outcome).toBe("dry_run_preview");
-  });
-
-  it("blocks git_controlled live deploy when path owner mismatches and suggests corrected live path", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r-owner-mismatch-live",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-owner-mismatch-live",
-        payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "live",
-          release_intent: "deploy",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          repository_root: "/home/wronguser/public_html",
-          branch: "master",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    // Must include corrected live path suggestion
-    expect(result.error?.message).toMatch(/\/home\/bbcyvf27\/public_html/);
   });
 
   it("returns synced_live_to_staging for managed_clone_sync refresh", async () => {
@@ -556,12 +288,13 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-lock",
         payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "live",
-          release_intent: "deploy",
-          pipeline_id: "P3",
+          workflow_mode: "managed_clone_sync",
+          target_environment: "staging",
+          release_intent: "refresh",
+          pipeline_id: "P2R",
           source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
+          direction: "live_to_staging",
+          sync_scope: "files",
           lock_key: "deploy-lock-key",
         },
       },
@@ -582,12 +315,13 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-verify-fail",
         payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "live",
-          release_intent: "deploy",
-          pipeline_id: "P3",
+          workflow_mode: "managed_clone_sync",
+          target_environment: "staging",
+          release_intent: "refresh",
+          pipeline_id: "P2R",
           source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
+          direction: "live_to_staging",
+          sync_scope: "files",
           verify_after_deploy: true,
         },
       },
@@ -612,12 +346,13 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-verify-rollback",
         payload: {
-          workflow_mode: "git_controlled",
-          target_environment: "live",
-          release_intent: "deploy",
-          pipeline_id: "P3",
+          workflow_mode: "managed_clone_sync",
+          target_environment: "staging",
+          release_intent: "refresh",
+          pipeline_id: "P2R",
           source_profile: sourceProfile,
-          repository_root: "/home/bbcyvf27/public_html",
+          direction: "live_to_staging",
+          sync_scope: "files",
           verify_after_deploy: true,
           auto_rollback_on_verify_failure: true,
         },

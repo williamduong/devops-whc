@@ -54,11 +54,11 @@ function main() {
   syncVersionFromRootPackage();
 
   copyDirFromRoot("dist");
-  copyFileFromRoot("scripts/start-mcp.cjs");
+  copyFileFromRoot("scripts/start-whc.cjs");
   copyFileFromRoot("scripts/prepare-first-time.cjs");
   copyFileFromRoot("README.md");
-  copyFileFromRoot("AGENT_MCP_USAGE.md");
-  copyFileFromRoot("WHC_MCP_REQUIREMENTS.md");
+  copyFileFromRoot("AGENT_USAGE.md");
+  copyFileFromRoot("WHC_REQUIREMENTS.md");
   copyFileFromRoot("LICENSE");
 
   console.log("[prepare-publish-package] Synced publish artifacts into packages/devops-whc");

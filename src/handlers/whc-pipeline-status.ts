@@ -50,7 +50,7 @@ export async function executeWhcPipelineStatus(
         next_step: "Run whc_prepare then a write tool to initialize pipeline state.",
         artifacts: {
           state_file: getPipelineStatusFile(rootDir),
-          flow_log_file: config.flowLogPath ?? ".mcp/whc-mcp/logs/flow-events.jsonl",
+          flow_log_file: config.flowLogPath ?? ".whc/logs/flow-events.jsonl",
         },
       },
       error: null,
@@ -88,7 +88,7 @@ export async function executeWhcPipelineStatus(
       artifacts: {
         state_file: getPipelineStatusFile(rootDir),
         manifest_file: manifestFile,
-        flow_log_file: config.flowLogPath ?? ".mcp/whc-mcp/logs/flow-events.jsonl",
+        flow_log_file: config.flowLogPath ?? ".whc/logs/flow-events.jsonl",
       },
     },
     error: null,

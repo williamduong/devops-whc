@@ -30,7 +30,7 @@ function ensureFileIfMissing(filePath, data) {
 
 function resolveStateRoot(rootDir) {
   const configured = (process.env.WHC_STATE_ROOT || "").trim();
-  const relative = configured.length > 0 ? configured : ".mcp/whc-mcp";
+  const relative = configured.length > 0 ? configured : ".whc";
   const segments = relative.split(/[\\/]+/).filter(Boolean);
   return path.join(rootDir, ...segments);
 }
@@ -51,7 +51,7 @@ function main() {
   ensureDir(logsDir);
   ensureDir(envDir);
 
-  ensureGitignoreRule(rootDir, ".mcp/");
+  ensureGitignoreRule(rootDir, ".whc/");
 
   const statusFile = path.join(stateDir, "pipeline-status.json");
   ensureFileIfMissing(
@@ -68,7 +68,7 @@ function main() {
     ) + "\n",
   );
 
-  console.log("[prepare-first-time] Initialized .mcp/whc-mcp hidden state and ensured .gitignore contains .mcp/");
+  console.log("[prepare-first-time] Initialized .whc hidden state and ensured .gitignore contains .whc/");
   console.log(`[prepare-first-time] State file: ${statusFile}`);
 }
 

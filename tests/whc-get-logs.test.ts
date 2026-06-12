@@ -8,7 +8,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: {},
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {

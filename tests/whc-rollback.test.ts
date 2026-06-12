@@ -11,7 +11,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: {},
   paths: { prod: "/home/user/public_html", staging: "/home/user/staging" },
   sourceProfile: {
@@ -112,7 +112,7 @@ describe("executeWhcRollback", () => {
     const root = mkdtempSync(join(tmpdir(), "whc-rollback-preview-"));
     process.chdir(root);
 
-    const reportsDir = join(root, ".mcp", "whc-mcp", "state", "reports");
+    const reportsDir = join(root, ".whc", "state", "reports");
     mkdirSync(reportsDir, { recursive: true });
     const reportPath = join(reportsDir, "rel-1.verify-report.json");
     writeFileSync(
@@ -150,7 +150,7 @@ describe("executeWhcRollback", () => {
     const root = mkdtempSync(join(tmpdir(), "whc-rollback-exec-"));
     process.chdir(root);
 
-    const reportsDir = join(root, ".mcp", "whc-mcp", "state", "reports");
+    const reportsDir = join(root, ".whc", "state", "reports");
     mkdirSync(reportsDir, { recursive: true });
     const reportPath = join(reportsDir, "rel-2.verify-report.json");
     writeFileSync(

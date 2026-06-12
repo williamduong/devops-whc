@@ -1,10 +1,10 @@
-# WHC MCP Agent Usage Guide
+# WHC CLI Agent Usage Guide
 
-This guide is for AI agents and operators who need predictable, safe usage of the WHC MCP server.
+This guide is for AI agents and operators who need predictable, safe usage of the WHC tool server.
 
 ## 1. Goal
 
-Use WHC MCP to run a safe release flow:
+Use WHC CLI to run a safe release flow:
 
 1. Initialize workspace state (`whc_prepare`).
 2. Validate connectivity and environment.
@@ -17,14 +17,12 @@ Use WHC MCP to run a safe release flow:
 The server supports two workflow modes:
 
 1. `managed_clone_sync`
-2. `git_controlled`
 
 Most WHC managed WordPress flows use `managed_clone_sync`.
 
 If server env sets `WHC_WORKFLOW_MODE=managed_clone_sync`, treat staging as managed-only.
-Do not call `git_controlled` for staging in that mode.
 
-## 2.2 MCP Registration Standard
+## 2.2 Tool Server Registration Standard
 
 Use one of these two registration patterns and keep them consistent with README.
 
@@ -33,36 +31,36 @@ Published package (`npx`) recommended for most users:
 ```jsonc
 {
   "servers": {
-    "whc-mcp": {
+    "whc": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "devops-whc", "--serve"],
       "env": {
         "WHC_ENV_FILE": "${workspaceFolder}/.env",
         "WHC_LOCAL_PROJECT_ROOT": "${workspaceFolder}",
-        "WHC_STATE_ROOT": ".mcp/whc-mcp",
-        "WHC_MCP_INSTANCE_NAME": "whc-mcp"
+        "WHC_STATE_ROOT": ".whc",
+        "WHC_INSTANCE_NAME": "whc"
       }
     }
   }
 }
 ```
 
-Local clone (`start-mcp.cjs`) for contributors:
+Local clone (`start-whc.cjs`) for contributors:
 
 ```jsonc
 {
   "servers": {
-    "whc-mcp": {
+    "whc": {
       "type": "stdio",
       "command": "node",
-      "args": ["./scripts/start-mcp.cjs"],
+      "args": ["./scripts/start-whc.cjs"],
       "cwd": "${workspaceFolder}",
       "env": {
         "WHC_ENV_FILE": "${workspaceFolder}/.env",
         "WHC_LOCAL_PROJECT_ROOT": "${workspaceFolder}",
-        "WHC_STATE_ROOT": ".mcp/whc-mcp",
-        "WHC_MCP_INSTANCE_NAME": "whc-mcp"
+        "WHC_STATE_ROOT": ".whc",
+        "WHC_INSTANCE_NAME": "whc"
       }
     }
   }
@@ -116,7 +114,6 @@ Always collect these first:
    - `database`
    - `everything`
 5. Whether `dry_run` and `confirmed` are required by policy.
-6. For `git_controlled`, ensure `repository_root` belongs to current `WHC_USER` home path (`/home/<WHC_USER>/...`).
 
 ## 3.1 Manual vs Agent Responsibilities
 
@@ -268,8 +265,7 @@ Treat these as two different operations:
   - `direction=live_to_staging`
   - `release_intent=refresh`
 2. Release deploy to staging:
-  - Use release candidate source (typically `git_controlled`), not live mirror sync.
-  - Use `repository_root` under `/home/<WHC_USER>/...`; cross-account paths are blocked by policy.
+  - Use release candidate source (SSH/SCP deploy), not live mirror sync.\r\n  - Use `repository_root` under `/home/<WHC_USER>/...`; cross-account paths are blocked by policy.
 
 Policy note:
 
@@ -286,7 +282,7 @@ Symptom:
 Checks:
 
 1. Confirm `WHC_ENV_FILE` points to the intended env file.
-2. Confirm the MCP process has reloaded after env edits.
+2. Confirm The tool server process has reloaded after env edits.
 3. Avoid malformed quoting in key path values.
 
 ### 8.2 Deploy validation errors in managed mode
@@ -304,13 +300,13 @@ If request fails with missing direction, ensure payload includes:
 
 ### 10.1 Log path
 
-1. Default path: `.mcp/whc-mcp/logs/flow-events.jsonl`
+1. Default path: `.whc/logs/flow-events.jsonl`
 2. Custom path (optional): set `WHC_FLOW_LOG_PATH` in env
 
 ### 10.2 Read latest entries (PowerShell)
 
 ```powershell
-Get-Content .mcp/whc-mcp/logs/flow-events.jsonl -Tail 20
+Get-Content .whc/logs/flow-events.jsonl -Tail 20
 ```
 
 If custom path is configured:
@@ -322,7 +318,7 @@ Get-Content $env:WHC_FLOW_LOG_PATH -Tail 20
 Filter only deploy events:
 
 ```powershell
-Get-Content .mcp/whc-mcp/logs/flow-events.jsonl -Tail 200 |
+Get-Content .whc/logs/flow-events.jsonl -Tail 200 |
   ForEach-Object { $_ | ConvertFrom-Json } |
   Where-Object { $_.tool -eq 'whc_deploy' } |
   Select-Object -Last 10
@@ -345,7 +341,7 @@ Minimal response snippet:
 
 ```text
 Flow log:
-- path: .mcp/whc-mcp/logs/flow-events.jsonl
+- path: .whc/logs/flow-events.jsonl
 - action_id: <value>
 - tool: whc_deploy
 - status: success|failure
@@ -360,24 +356,24 @@ Flow log:
 For local clone workflows, run once per workspace:
 
 ```powershell
-npm run mcp:prepare
+npm run prepare
 ```
 
-For npm-package workflows, call `whc_prepare` once from the MCP client after the server starts.
+For npm-package workflows, call `whc_prepare` once from The tool server client after the server starts.
 
 This initializes hidden management paths automatically:
-1. `.mcp/whc-mcp/state/pipeline-status.json`
-2. `.mcp/whc-mcp/state/releases/`
-3. `.mcp/whc-mcp/state/reports/`
-4. `.mcp/whc-mcp/logs/`
+1. `.whc/state/pipeline-status.json`
+2. `.whc/state/releases/`
+3. `.whc/state/reports/`
+4. `.whc/logs/`
 
-It also ensures `.mcp/` is ignored by git.
+It also ensures `.whc/` is ignored by git.
 
 ## 10.5 Automatic State Tracking
 
-For every write tool run, MCP now auto-updates:
-1. `.mcp/whc-mcp/state/pipeline-status.json` (started/completed/status/next step/error)
-2. `.mcp/whc-mcp/state/releases/<request_id>.auto-manifest.json` (tool metadata + git changed files snapshot)
+For every write tool run, tool server now auto-updates:
+1. `.whc/state/pipeline-status.json` (started/completed/status/next step/error)
+2. `.whc/state/releases/<request_id>.auto-manifest.json` (tool metadata + git changed files snapshot)
 
 No manual template authoring is required for normal DevOps runs.
 
@@ -394,3 +390,6 @@ For `whc_deploy` and `whc_setup_remote`, read these response fields first:
 Decision rule:
 1. If `pipeline_status=pass_partial`, do not claim end-to-end release completion.
 2. Follow `next_step` and unresolved `manual_actions` before moving to next gate.
+
+
+

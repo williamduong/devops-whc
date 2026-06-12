@@ -8,7 +8,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: { primary: "example.com" },
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {
@@ -30,7 +30,7 @@ const baseRequest = {
   confirmed: true,
   idempotency_key: "idem-1",
   payload: {
-    workflow_mode: "git_controlled" as const,
+    workflow_mode: "managed_clone_sync" as const,
     target_environment: "live" as const,
     release_intent: "deploy" as const,
     pipeline_id: "P3" as const,
@@ -63,117 +63,18 @@ function mockUapi(ok = true): WhcUapiClient {
   } as unknown as WhcUapiClient;
 }
 
-function mockSshWithCommandCapture(
-  stdout: string,
-  commandLog: string[],
-  ok = true,
-): WhcSshClient {
-  return {
-    execWithKey: async (_target: unknown, command: string) => {
-      commandLog.push(command);
-      return {
-        ok,
-        latencyMs: 10,
-        stdout,
-        stderr: "",
-        message: ok ? "ok" : "ssh failed",
-      };
-    },
-  } as unknown as WhcSshClient;
-}
-
 describe("runDeployVerification", () => {
-  it("passes when path and .cpanel.yml checks pass", async () => {
-    const result = await runDeployVerification(
-      baseConfig,
-      baseRequest,
-      mockSsh("__PATH_OK__\n__CPANEL_YML_OK__\n__WP_OK__\n"),
-    );
+  it("always passes for managed_clone_sync", async () => {
+    const result = await runDeployVerification(baseConfig, baseRequest, mockSsh(""));
     expect(result.ok).toBe(true);
-  });
-
-  it("fails when deployment path is missing", async () => {
-    const result = await runDeployVerification(
-      baseConfig,
-      baseRequest,
-      mockSsh("__PATH_MISSING__\n"),
-    );
-    expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/path does not exist/i);
-  });
-
-  it("fails for full_site when WP-CLI is missing", async () => {
-    const result = await runDeployVerification(
-      baseConfig,
-      baseRequest,
-      mockSsh("__PATH_OK__\n__CPANEL_YML_OK__\n__WPCLI_MISSING__\n"),
-    );
-    expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/WP-CLI is required/i);
-  });
-
-  it("skips WP-CLI check for package_only", async () => {
-    const commandLog: string[] = [];
-    const result = await runDeployVerification(
-      baseConfig,
-      {
-        ...baseRequest,
-        payload: {
-          ...baseRequest.payload,
-          source_profile: {
-            source_kind: "package_only",
-            deploy_unit: "package_bundle",
-          },
-        },
-      },
-      mockSshWithCommandCapture("__PATH_OK__\n__CPANEL_YML_OK__\n", commandLog),
-    );
-
-    expect(result.ok).toBe(true);
-    expect(commandLog[0]).not.toContain("wp core is-installed");
-  });
-
-  it("skips WP-CLI check for artifact_first", async () => {
-    const commandLog: string[] = [];
-    const result = await runDeployVerification(
-      baseConfig,
-      {
-        ...baseRequest,
-        payload: {
-          ...baseRequest.payload,
-          source_profile: {
-            source_kind: "artifact_first",
-            deploy_unit: "build_artifact",
-          },
-        },
-      },
-      mockSshWithCommandCapture("__PATH_OK__\n__CPANEL_YML_OK__\n", commandLog),
-    );
-
-    expect(result.ok).toBe(true);
-    expect(commandLog[0]).not.toContain("wp core is-installed");
+    expect(result.message).toMatch(/managed_clone_sync/i);
   });
 });
 
 describe("runDeployRollback", () => {
-  it("fails when rollback_branch is missing", async () => {
+  it("always returns not-supported message", async () => {
     const result = await runDeployRollback(baseConfig, baseRequest, mockUapi(true));
     expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/rollback_branch/i);
-  });
-
-  it("triggers rollback deployment when rollback_branch is provided", async () => {
-    const result = await runDeployRollback(
-      baseConfig,
-      {
-        ...baseRequest,
-        payload: {
-          ...baseRequest.payload,
-          rollback_branch: "main",
-        },
-      },
-      mockUapi(true),
-    );
-    expect(result.ok).toBe(true);
+    expect(result.message).toMatch(/not supported/i);
   });
 });

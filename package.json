@@ -1,22 +1,22 @@
 {
   "name": "devops-whc-workspace",
   "version": "1.0.2-next",
-  "description": "WHC cPanel MCP server for deploy, verify, and rollback flows",
+  "description": "WHC cPanel automation CLI for deploy, verify, and rollback flows",
   "private": true,
   "main": "dist/index.js",
   "bin": {
-    "whc-mcp": "dist/index.js"
+    "whc": "dist/index.js"
   },
   "exports": {
     ".": "./dist/index.js"
   },
   "files": [
     "dist",
-    "scripts/start-mcp.cjs",
+    "scripts/start-whc.cjs",
     "scripts/prepare-first-time.cjs",
     "README.md",
-    "AGENT_MCP_USAGE.md",
-    "WHC_MCP_REQUIREMENTS.md",
+    "AGENT_USAGE.md",
+    "WHC_REQUIREMENTS.md",
     "LICENSE"
   ],
   "scripts": {
@@ -34,11 +34,12 @@
     "pack:check:root": "npm pack --dry-run",
     "dev": "tsx src/index.ts",
     "probe": "tsx src/index.ts --probe",
+    "check:generic": "tsx src/index.ts --check-generic",
     "check:health": "tsx src/index.ts --check-health",
     "help": "tsx src/index.ts --help",
     "serve": "tsx src/index.ts --serve",
-    "mcp:start": "node scripts/start-mcp.cjs",
-    "mcp:prepare": "node scripts/prepare-first-time.cjs"
+    "start": "node scripts/start-whc.cjs",
+    "prepare": "node scripts/prepare-first-time.cjs"
   },
   "keywords": [],
   "author": "",

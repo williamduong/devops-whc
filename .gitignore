@@ -12,8 +12,8 @@ coverage/
 .env.*.local
 .vscode/whc.env
 
-# MCP local state
-.mcp/
+# Local workspace state
+.whc/
 
 # Temporary and logs
 .tmp/
@@ -37,6 +37,6 @@ Thumbs.db
 packages/devops-whc/dist/
 packages/devops-whc/scripts/
 packages/devops-whc/README.md
-packages/devops-whc/AGENT_MCP_USAGE.md
-packages/devops-whc/WHC_MCP_REQUIREMENTS.md
+packages/devops-whc/AGENT_USAGE.md
+packages/devops-whc/WHC_REQUIREMENTS.md
 packages/devops-whc/LICENSE

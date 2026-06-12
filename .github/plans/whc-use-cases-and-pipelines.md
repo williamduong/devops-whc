@@ -5,19 +5,19 @@ Owner: devops-whc
 Last updated: 2026-06-08
 
 ## 1) Purpose
-Define the operational model of this MCP before further implementation.
+Define the operational model of this tool server before further implementation.
 
 This document answers:
-1. Which user problems the MCP must solve.
+1. Which user problems The tool server must solve.
 2. Which deployment pipeline applies to each problem.
 3. Which environment is the source of truth in each pipeline.
-4. Which MCP tools/actions are allowed at each step.
+4. Which tools/actions are allowed at each step.
 5. Which guardrails apply before state-changing operations.
 
 ## 2) System Model
 
 ## 2.0 Generic Orchestration Model
-This MCP must model deployment problems in provider-agnostic terms before mapping them to WHC.
+This tool server must model deployment problems in provider-agnostic terms before mapping them to WHC.
 
 ### Core abstractions
 1. Project source
@@ -44,7 +44,7 @@ This MCP must model deployment problems in provider-agnostic terms before mappin
 3. Source classification must happen before pipeline selection.
 
 ## 2.1 WHC-Native Capability Map
-This MCP must then map the generic model onto WHC according to what the platform actually provides.
+This tool server must then map the generic model onto WHC according to what the platform actually provides.
 
 ### WHC native surfaces
 1. Managed WordPress bootstrap
@@ -75,9 +75,9 @@ This MCP must then map the generic model onto WHC according to what the platform
 3. A staging-to-live sync can overwrite changes on target environment.
 4. Automated database backup may be created under `/wp_deploy_backups` on the Live account after deployment issues.
 
-### MCP design implication
+### tool server design implication
 1. Pipelines must be selected from the generic model first, then mapped to these native surfaces.
-2. MCP orchestration is additive, not a replacement for WHC's managed staging semantics.
+2. tool server orchestration is additive, not a replacement for WHC's managed staging semantics.
 3. Git and WP-CLI are support layers around WHC, not proof that WHC behaves like Kubernetes-style CI/CD.
 
 ### 2.2 Environment roles
@@ -121,7 +121,7 @@ Implication:
 2. Live initialization must happen first.
 3. Pipeline should model WHC sync scopes: Everything, Files Only, Database Only.
 
-### Mode B: git_controlled
+### Mode B: ssh_scp (file transfer + WP-CLI)
 Use when:
 1. Deployment is driven by Git and cPanel Git Version Control.
 2. Staging may be folder-based or repo-based.
@@ -235,8 +235,8 @@ Variants:
 WHC-native mapping:
 1. WHC natively supports Staging -> Live push in managed mode.
 2. WHC natively supports repository creation/clone in cPanel Git Version Control.
-3. MCP may combine these, but must not blur them into a fake single platform feature.
-4. MCP must classify the local project source before choosing one of these variants.
+3. tool server may combine these, but must not blur them into a fake single platform feature.
+4. tool server must classify the local project source before choosing one of these variants.
 
 ### UC5 - Operations / Incident / Recovery
 Goal:
@@ -380,7 +380,7 @@ Steps:
 6. Health verification.
 
 Entry criteria:
-1. `workflow_mode = git_controlled`
+1. `workflow_mode = managed_clone_sync`
 
 Exit criteria:
 1. Target code updated and runtime validated.
@@ -395,7 +395,7 @@ Decision rules:
    - `direction = live_to_staging` -> route to P2R semantics.
    - `direction = staging_to_live` -> route to P2 semantics.
    - require `sync_scope = files | database | everything`.
-3. If `workflow_mode = git_controlled`:
+3. Note: git_controlled (cPanel Git UAPI) is not available on WHC Managed WordPress.
    - route to Git deployment semantics only.
    - do not model this as WHC staging synchronization.
 4. If request mixes both intents:
@@ -451,14 +451,14 @@ Steps:
 | Live not yet baselined | P1 | managed_clone_sync |
 | Staging exists but is stale and must be refreshed from Live | P2R | managed_clone_sync |
 | Managed staging exists and release should use WHC sync | P2 | managed_clone_sync |
-| Git repo is configured and deployment is code-first | P3 | git_controlled |
+| Git repo is configured and deployment is code-first | P3 | managed_clone_sync (then SSH/SCP for code) |
 | A deploy request must be routed by mode/direction | P3D | either |
-| Default WP exists and Git project must take over | P4 | managed_clone_sync or git_controlled after migration |
+| Default WP exists and Git project must take over | P4 | managed_clone_sync refresh + SSH/SCP code delivery |
 | Something failed and operator needs diagnosis/recovery | P5 | either |
 
 ## 7) Tool and Action Mapping
 
-| Use case / pipeline | Main MCP tool(s) | Supporting actions |
+| Use case / pipeline | Main tool(s) | Supporting actions |
 | --- | --- | --- |
 | P0 Source classification | whc_setup_remote, whc_deploy | source kind detection, deploy-unit detection, build-strategy detection |
 | P1 Live baseline | whc_check_health | capability probe, path discovery, domain/DNS state, WP-CLI probe |
@@ -516,7 +516,7 @@ Rule:
 | Everything | Live -> Staging | D | explicit confirm + stale-staging overwrite warning |
 | Everything | Staging -> Live | D | explicit confirm + dynamic-data warning |
 
-## 10) MCP Output Requirements
+## 10) tool server Output Requirements
 Every relevant tool response should eventually expose:
 1. `meta.workflow_mode`
 2. `meta.pipeline_id`
@@ -550,3 +550,5 @@ This model is considered integrated only when:
 2. Each state-changing action names its workflow mode and pipeline.
 3. WP-CLI actions are classified by safety level.
 4. Recovery and migration paths are first-class documented outputs, not ad hoc advice.
+
+

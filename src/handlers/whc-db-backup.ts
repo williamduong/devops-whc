@@ -49,7 +49,6 @@ export async function executeWhcDbBackup(
 
   // Dry run: preview command without executing
   if (request.dry_run) {
-    const previewCmd = buildWpCliCommand(dumpPath, compress, tables);
     return {
       ok: true,
       action_id: actionIdFactory(),

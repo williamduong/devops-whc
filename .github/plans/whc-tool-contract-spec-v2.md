@@ -5,7 +5,7 @@ Owner: devops-whc
 Last updated: 2026-06-10
 
 ## 1) Purpose
-Define and freeze the current MCP tool contracts for safe DevOps operations on WHC.
+Define and freeze the current tool contracts for safe DevOps operations on WHC.
 
 This version reflects implementation state, not pre-implementation proposal.
 
@@ -57,15 +57,15 @@ Default order:
 
 ## 4) Hidden State Namespace
 Project-scoped hidden namespace:
-1. .mcp/whc-mcp/state
-2. .mcp/whc-mcp/state/releases
-3. .mcp/whc-mcp/state/reports
-4. .mcp/whc-mcp/logs
-5. .mcp/whc-mcp/env
+1. .whc/state
+2. .whc/state/releases
+3. .whc/state/reports
+4. .whc/logs
+5. .whc/env
 
 Rules:
 1. State is repository-scoped.
-2. .mcp/ remains gitignored.
+2. .whc/ remains gitignored.
 3. Namespace can be overridden with WHC_STATE_ROOT.
 
 ## 5) Tool Contracts
@@ -77,7 +77,7 @@ Category:
 
 Purpose:
 1. Initialize hidden workspace state.
-2. Ensure .mcp/ ignore rule.
+2. Ensure .whc/ ignore rule.
 3. Run minimal credential readiness checks.
 
 Notes:

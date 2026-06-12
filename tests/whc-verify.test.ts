@@ -11,7 +11,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: {},
   paths: { prod: "/home/prod/public_html", staging: "/home/staging/public_html" },
   sourceProfile: {
@@ -98,7 +98,7 @@ describe("executeWhcVerify", () => {
     const root = mkdtempSync(join(tmpdir(), "whc-verify-success-"));
     process.chdir(root);
 
-    const releases = join(root, ".mcp", "whc-mcp", "state", "releases");
+    const releases = join(root, ".whc", "state", "releases");
     mkdirSync(releases, { recursive: true });
     const manifest = join(releases, "req-100.auto-manifest.json");
     writeFileSync(

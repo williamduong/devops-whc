@@ -1,21 +1,21 @@
 {
   "name": "devops-whc",
   "version": "1.0.2-next",
-  "description": "WHC cPanel MCP server for deploy, verify, and rollback flows",
+  "description": "WHC cPanel automation CLI for deploy, verify, and rollback flows",
   "main": "dist/index.js",
   "bin": {
-    "whc-mcp": "dist/index.js"
+    "whc": "dist/index.js"
   },
   "exports": {
     ".": "./dist/index.js"
   },
   "files": [
     "dist",
-    "scripts/start-mcp.cjs",
+    "scripts/start-whc.cjs",
     "scripts/prepare-first-time.cjs",
     "README.md",
-    "AGENT_MCP_USAGE.md",
-    "WHC_MCP_REQUIREMENTS.md",
+    "AGENT_USAGE.md",
+    "WHC_REQUIREMENTS.md",
     "LICENSE"
   ],
   "scripts": {
@@ -24,6 +24,8 @@
     "pack:check": "npm pack --dry-run",
     "prehelp": "node ../../scripts/prepare-publish-package.cjs",
     "help": "node dist/index.js --help",
+    "prestart": "node ../../scripts/prepare-publish-package.cjs",
+    "start": "node scripts/start-whc.cjs",
     "preserve": "node ../../scripts/prepare-publish-package.cjs",
     "serve": "node dist/index.js --serve",
     "preprobe": "node ../../scripts/prepare-publish-package.cjs",
@@ -32,7 +34,7 @@
     "check:health": "node dist/index.js --check-health"
   },
   "keywords": [
-    "mcp",
+    "cli",
     "whc",
     "cpanel",
     "deploy"

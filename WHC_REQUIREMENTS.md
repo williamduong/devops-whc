@@ -1,7 +1,7 @@
-# WHC.ca (cPanel) MCP Server Requirements
+# WHC.ca (cPanel) tool server Requirements
 
 ## 1. Objective
-Build a specialized MCP (Model Context Protocol) Server to automate the management and deployment of web projects hosted on Web Hosting Canada (WHC.ca). The goal is to facilitate a seamless **Local -> Staging -> Production** workflow directly from the terminal/Gemini CLI.
+Build a specialized WHC tool server (stdio + CLI) to automate the management and deployment of web projects hosted on Web Hosting Canada (WHC.ca). The goal is to facilitate a seamless **Local -> Staging -> Production** workflow directly from the terminal/Gemini CLI.
 
 ## 2. Core Features
 - **Git Automation:** Remote repository creation and branch-based synchronization.
@@ -72,14 +72,14 @@ Operational implication:
 1. A successful `whc_setup_remote` still requires local source push (`git push`) and subsequent `whc_deploy`.
 
 ## 3.3 Manual Prerequisites (Must Be Explicit)
-These steps are not auto-solvable by MCP and must be prepared by operator:
+These steps are not auto-solvable by tool server and must be prepared by operator:
 1. WHC API token creation and placement in env.
 2. SSH key provisioning to correct cPanel account.
 3. Credential scope alignment (target path ownership/account).
 
 ## 4. Technical Stack
 - **Language:** TypeScript / Node.js.
-- **Framework:** MCP SDK (@modelcontextprotocol/sdk).
+- **Framework:** tool server SDK (@modelcontextprotocol/sdk).
 - **Communication:** 
     - **cPanel UAPI:** Over HTTPS (Port 2083) using API Tokens.
     - **SSH:** Using `ssh2` or system SSH (Port 27).
@@ -88,7 +88,7 @@ These steps are not auto-solvable by MCP and must be prepared by operator:
 ## 5. Implementation Roadmap
 
 ### Phase 1: Foundation & Auth
-- [ ] Initialize MCP project.
+- [ ] Initialize tool server project.
 - [ ] Implement secure `.env` loading for `WHC_API_TOKEN`, `WHC_USER`, and `WHC_HOST`.
 - [ ] Test connectivity to cPanel API and SSH.
 
@@ -103,10 +103,12 @@ These steps are not auto-solvable by MCP and must be prepared by operator:
 - [ ] Add health check dashboard.
 
 ### Phase 4: Gemini CLI Integration
-- [ ] Register the MCP server in `gemini-config.json`.
+- [ ] Register the tool server in `gemini-config.json`.
 - [ ] Create high-level commands/aliases (e.g., `whc-sync-staging`).
 
 ## 6. Security Protocol
 - No API tokens or Private Keys are to be hardcoded.
 - All sensitive data must reside in a local `.env` file excluded from git.
 - API requests must use HTTPS with proper header authentication.
+
+

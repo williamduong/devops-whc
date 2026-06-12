@@ -283,7 +283,7 @@ function buildSetupRemotePhaseCoverage(dryRun: boolean): WhcSetupRemoteData["pha
 }
 
 function extractHomeOwner(pathValue: string): string | undefined {
-  const match = pathValue.match(/^\/home\/([^\/]+)\//);
+  const match = pathValue.match(/^\/home\/([^/]+)\//);
   return match?.[1];
 }
 

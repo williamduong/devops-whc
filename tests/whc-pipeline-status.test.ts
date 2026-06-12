@@ -10,7 +10,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: {},
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {
@@ -57,7 +57,7 @@ describe("executeWhcPipelineStatus", () => {
 
   it("reads existing state file", async () => {
     const root = mkdtempSync(join(tmpdir(), "whc-pipe-active-"));
-    const stateDir = join(root, ".mcp", "whc-mcp", "state");
+    const stateDir = join(root, ".whc", "state");
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(
       join(stateDir, "pipeline-status.json"),

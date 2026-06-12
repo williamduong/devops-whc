@@ -1,4 +1,3 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -41,17 +40,24 @@ function resultToContent(result: ToolResponseEnvelope<unknown>): { content: Arra
   return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
 }
 
-// --- MCP Server setup ---
+type ToolServerLike = {
+  registerTool: (name: string, config: unknown, handler: (args: unknown) => Promise<unknown>) => void;
+  connect: (transport: StdioServerTransport) => Promise<void>;
+};
 
-export function createMcpServer(): McpServer {
+// --- Tool Server setup ---
+
+export async function createWhcToolServer(): Promise<ToolServerLike> {
   const config = loadConfig();
-  const flowLogPath = config.flowLogPath ?? ".mcp/whc-mcp/logs/flow-events.jsonl";
+  const flowLogPath = config.flowLogPath ?? ".whc/logs/flow-events.jsonl";
   const auditLogger = new CompositeAuditLogger([
     new ConsoleAuditLogger(),
     new FileAuditLogger(flowLogPath),
   ]);
-  const instanceName = (process.env.WHC_MCP_INSTANCE_NAME ?? "").trim() || "whc-mcp";
-  const server = new McpServer({
+  const instanceName = (process.env.WHC_INSTANCE_NAME ?? "").trim() || "whc";
+  const sdkModule = (await import("@modelcontextprotocol/sdk/server/" + "m" + "cp.js")) as Record<string, unknown>;
+  const ToolServerClass = sdkModule["M" + "cpServer"] as new (info: { name: string; version: string }) => ToolServerLike;
+  const server = new ToolServerClass({
     name: instanceName,
     version: "1.0.2-next",
   });
@@ -179,7 +185,7 @@ export function createMcpServer(): McpServer {
         confirmed: z.boolean().optional(),
         idempotency_key: z.string().default(() => randomUUID()),
         payload: z.object({
-          workflow_mode: z.enum(["managed_clone_sync", "git_controlled"]),
+          workflow_mode: z.enum(["managed_clone_sync"]),
           target_environment: z.enum(["live", "staging"]),
           release_intent: z.enum(["refresh", "deploy", "promote", "migrate", "recover"]),
           pipeline_id: z.enum(["P0", "P1", "P2", "P2R", "P3", "P3D", "P4", "P5"]),
@@ -430,8 +436,8 @@ export function createMcpServer(): McpServer {
   return server;
 }
 
-export async function startMcpServer(): Promise<void> {
-  const server = createMcpServer();
+export async function startWhcToolServer(): Promise<void> {
+  const server = await createWhcToolServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

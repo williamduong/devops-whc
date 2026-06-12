@@ -10,7 +10,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "git_controlled" as const,
+  workflowMode: "managed_clone_sync" as const,
   domains: {},
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {
@@ -76,7 +76,7 @@ describe("whc_prepare schema", () => {
 });
 
 describe("executeWhcPrepare", () => {
-  it("creates .mcp/whc-mcp state and pipeline status file", async () => {
+  it("creates .whc state and pipeline status file", async () => {
     for (const key of REQUIRED_KEYS) {
       process.env[key] = "configured";
     }
@@ -93,8 +93,8 @@ describe("executeWhcPrepare", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.data?.state_root).toBe(".mcp/whc-mcp");
-    expect(result.data?.pipeline_status_file).toContain(".mcp");
+    expect(result.data?.state_root).toBe(".whc");
+    expect(result.data?.pipeline_status_file).toContain(".whc");
 
     const statusRaw = readFileSync(result.data!.pipeline_status_file, "utf8");
     const status = JSON.parse(statusRaw) as { status: string };

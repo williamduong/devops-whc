@@ -1,14 +1,14 @@
 {
   "servers": {
-    "whc-mcp": {
+    "whc": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "devops-whc", "--serve"],
       "env": {
         "WHC_ENV_FILE": "${workspaceFolder}/.env",
         "WHC_LOCAL_PROJECT_ROOT": "${workspaceFolder}",
-        "WHC_STATE_ROOT": ".mcp/whc-mcp",
-        "WHC_MCP_INSTANCE_NAME": "whc-mcp"
+        "WHC_STATE_ROOT": ".whc",
+        "WHC_INSTANCE_NAME": "whc"
       }
     }
   }

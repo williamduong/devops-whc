@@ -10,17 +10,18 @@ import { TOOL_REGISTRY } from "./registry/tool-registry";
 import { InMemoryIdempotencyStore } from "./idempotency/store";
 import { ConsoleAuditLogger } from "./audit/audit-logger";
 import { ToolResponseEnvelope } from "./contracts/envelope";
-import { startMcpServer } from "./server";
+import { startWhcToolServer } from "./server";
+import { runSourceCompatibilityCheck } from "./probes/source-compatibility";
 
-const packageJson = require("../package.json") as { version: string };
-const APP_VERSION = packageJson.version;
+const APP_VERSION = process.env.npm_package_version ?? "0.0.0";
 
 const HELP_TEXT = [
-  `WHC MCP CLI Help v${APP_VERSION}`,
+  `WHC CLI Help v${APP_VERSION}`,
   "",
   "Modes:",
-  "  --serve         Start MCP stdio server (registers all tools)",
+  "  --serve         Start stdio tool server (registers all tools)",
   "  --probe         Run connectivity probe (UAPI, SSH, WP-CLI)",
+  "  --check-generic Run one-shot deploy readiness check",
   "  --check-health  Execute whc_check_health once and print JSON",
   "  --version       Print CLI version",
   "  --help          Show this help",
@@ -28,12 +29,13 @@ const HELP_TEXT = [
   "Quick start:",
   "  1) npm install",
   "  2) copy .env.example to .env and fill secrets",
-  "  3) npm run mcp:prepare",
+  "  3) npm run prepare",
   "  4) npm run serve",
   "",
   "Published package use:",
   "  npx -y devops-whc --serve",
   "  npx -y devops-whc --probe",
+  "  npx -y devops-whc --check-generic",
   "  npx -y devops-whc --check-health",
   "",
   "Safe release flow:",
@@ -50,7 +52,7 @@ const HELP_TEXT = [
   "  - staging_to_live + database/everything needs backup policy",
   "",
   "Flow log:",
-  "  - default: .mcp/whc-mcp/logs/flow-events.jsonl",
+  "  - default: .whc/logs/flow-events.jsonl",
   "  - override: set WHC_FLOW_LOG_PATH",
   "",
   "Secrets safety:",
@@ -58,7 +60,7 @@ const HELP_TEXT = [
   "  - npm tarball excludes local env files by design",
   "",
   "Reference:",
-  "  - AGENT_MCP_USAGE.md",
+  "  - AGENT_USAGE.md",
 ].join("\n");
 
 async function main(): Promise<void> {
@@ -72,9 +74,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  // MCP stdio server mode — all 6 tools registered, reads from stdin/stdout
+  // Stdio server mode — all tools registered, reads from stdin/stdout
   if (process.argv.includes("--serve")) {
-    await startMcpServer();
+    await startWhcToolServer();
     return;
   }
 
@@ -89,6 +91,26 @@ async function main(): Promise<void> {
           ok: report.uapi.ok && report.ssh.ok && report.wpcli.prod.reachable && stagingWpCliOk,
           action_id: randomUUID(),
           tool: "whc_connectivity_probe",
+          data: report,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  if (process.argv.includes("--check-generic")) {
+    const report = runSourceCompatibilityCheck(config);
+    console.log(
+      JSON.stringify(
+        {
+          ok: report.ok,
+          ready_for_deploy: report.ready_for_deploy,
+          status: report.status,
+          next_actions: report.next_actions,
+          action_id: randomUUID(),
+          tool: "whc_source_compatibility_check",
           data: report,
         },
         null,

@@ -1,7 +1,7 @@
-import { startMcpServer } from "./server";
+import { startWhcToolServer } from "./server";
 
-startMcpServer().catch((error) => {
-  const message = error instanceof Error ? error.message : "MCP server startup failed";
+startWhcToolServer().catch((error) => {
+  const message = error instanceof Error ? error.message : "WHC tool server startup failed";
   process.stderr.write(message + "\n");
   process.exitCode = 1;
 });

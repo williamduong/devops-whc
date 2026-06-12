@@ -11,7 +11,7 @@ const envSchema = z.object({
   WHC_API_TOKEN: z.string().min(1),
   WHC_USER: z.string().min(1),
   WHC_HOST: z.string().min(1),
-  WHC_WORKFLOW_MODE: z.enum(["managed_clone_sync", "git_controlled"]).default("managed_clone_sync"),
+  WHC_WORKFLOW_MODE: z.enum(["managed_clone_sync"]).default("managed_clone_sync"),
 
   WHC_PRIMARY_DOMAIN: z.string().min(1).optional(),
   WHC_TESTING_DOMAIN: z.string().min(1).optional(),
@@ -32,11 +32,6 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
-  WHC_ALLOW_STAGING_GIT_CONTROLLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
-
   WHC_PROD_SSH_HOST: z.string().min(1),
   WHC_PROD_SSH_PORT: z.coerce.number().int().positive().default(27),
   WHC_PROD_SSH_USERNAME: z.string().min(1),
@@ -71,7 +66,7 @@ export type AppConfig = {
   user: string;
   host: string;
   apiBaseUrl: string;
-  workflowMode: "managed_clone_sync" | "git_controlled";
+  workflowMode: "managed_clone_sync";
   domains: {
     primary?: string;
     testing?: string;
@@ -94,7 +89,6 @@ export type AppConfig = {
     requireStagingConfirm: boolean;
     warnDynamicDataSync: boolean;
     enforceStagingFirst?: boolean;
-    allowStagingGitControlled?: boolean;
   };
   sshTargets: {
     prod: {
@@ -165,7 +159,6 @@ export function loadConfig(env = process.env): AppConfig {
       requireStagingConfirm: data.WHC_REQUIRE_STAGING_CONFIRM,
       warnDynamicDataSync: data.WHC_WARN_DYNAMIC_DATA_SYNC,
       enforceStagingFirst: data.WHC_ENFORCE_STAGING_FIRST,
-      allowStagingGitControlled: data.WHC_ALLOW_STAGING_GIT_CONTROLLED,
     },
     sshTargets: {
       prod: {

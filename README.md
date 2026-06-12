@@ -1,6 +1,6 @@
 # devops-whc
 
-WHC cPanel MCP server for deploy, verify, rollback, logs, backup, and health flows.
+WHC cPanel automation CLI for deploy, verify, rollback, logs, backup, and health flows.
 
 Current workspace version: 1.0.2-next
 
@@ -14,7 +14,7 @@ The repository root is the development workspace. The publish package is prepare
 
 ## What this is
 
-This package exposes an MCP server that VS Code Copilot or any MCP client can launch over stdio. It is designed for WHC cPanel projects and keeps the local workflow, target environment, and safety rules explicit.
+This package exposes a stdio tool server and CLI that VS Code Copilot or other clients can launch. It is designed for WHC cPanel projects and keeps the local workflow, target environment, and safety rules explicit.
 
 The server supports both usage patterns:
 
@@ -40,34 +40,34 @@ Or install globally:
 
 ```powershell
 npm install -g devops-whc
-whc-mcp --help
+whc --help
 ```
 
 ## Quick Start
 
 1. Copy `.env.example` to `.env`.
 2. Fill in the required WHC credentials and target paths.
-3. Run `npm run mcp:prepare` once per workspace.
+3. Run `npm run prepare` once per workspace.
 4. Start the server with `npm run serve` for local development, or `npx -y devops-whc --serve` after npm install.
 
-If you are using VS Code Copilot MCP, point the server command to the published package or to the local `start-mcp.cjs` helper.
+If you are using VS Code Copilot, point the server command to the published package or to the local `start-whc.cjs` helper.
 
-## VS Code MCP Config
+## VS Code Tool Server Config
 
 Published-package example:
 
 ```jsonc
 {
   "servers": {
-    "whc-mcp": {
+    "whc": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "devops-whc", "--serve"],
       "env": {
         "WHC_ENV_FILE": "${workspaceFolder}/.env",
         "WHC_LOCAL_PROJECT_ROOT": "${workspaceFolder}",
-        "WHC_STATE_ROOT": ".mcp/whc-mcp",
-        "WHC_MCP_INSTANCE_NAME": "whc-mcp"
+        "WHC_STATE_ROOT": ".whc",
+        "WHC_INSTANCE_NAME": "whc"
       }
     }
   }
@@ -79,16 +79,16 @@ Local-source example:
 ```jsonc
 {
   "servers": {
-    "whc-mcp": {
+    "whc": {
       "type": "stdio",
       "command": "node",
-      "args": ["./scripts/start-mcp.cjs"],
+      "args": ["./scripts/start-whc.cjs"],
       "cwd": "${workspaceFolder}",
       "env": {
         "WHC_ENV_FILE": "${workspaceFolder}/.env",
         "WHC_LOCAL_PROJECT_ROOT": "${workspaceFolder}",
-        "WHC_STATE_ROOT": ".mcp/whc-mcp",
-        "WHC_MCP_INSTANCE_NAME": "whc-mcp"
+        "WHC_STATE_ROOT": ".whc",
+        "WHC_INSTANCE_NAME": "whc"
       }
     }
   }
@@ -98,11 +98,12 @@ Local-source example:
 ## CLI Commands
 
 ```powershell
-whc-mcp --serve
-whc-mcp --probe
-whc-mcp --check-health
-whc-mcp --help
-whc-mcp --version
+whc --serve
+whc --probe
+whc --check-generic
+whc --check-health
+whc --help
+whc --version
 ```
 
 If you are using the npm package directly, the same commands work through `npx`:
@@ -110,6 +111,7 @@ If you are using the npm package directly, the same commands work through `npx`:
 ```powershell
 npx -y devops-whc --serve
 npx -y devops-whc --probe
+npx -y devops-whc --check-generic
 npx -y devops-whc --check-health
 npx -y devops-whc --help
 npx -y devops-whc --version
@@ -137,7 +139,7 @@ Set these in your local `.env` file:
 - `WHC_REQUIRE_STAGING_CONFIRM`
 - `WHC_WARN_DYNAMIC_DATA_SYNC`
 - `WHC_ENFORCE_STAGING_FIRST`
-- `WHC_ALLOW_STAGING_GIT_CONTROLLED`
+
 - `WHC_STAGING_SSH_HOST`
 - `WHC_STAGING_SSH_PORT`
 - `WHC_STAGING_SSH_USERNAME`
@@ -174,17 +176,39 @@ npx -y devops-whc --check-health
 
 Use this to inspect disk, SSL, load, and capability state.
 
-### 3) Start the MCP server in VS Code
-
-Once the MCP config is in place, Copilot can launch the server and call tools such as `whc_prepare`, `whc_deploy`, `whc_verify`, and `whc_rollback`.
-
-### 4) Prepare workspace state once
+### 3) Run deploy readiness check (single command)
 
 ```powershell
-npm run mcp:prepare
+npx -y devops-whc --check-generic
 ```
 
-This initializes the hidden project state under `.mcp/whc-mcp` and ensures the workspace ignores local management files.
+Or from local clone:
+
+```powershell
+npm run check:generic
+```
+
+This command validates whether your local WordPress source shape is compatible with the WHC generic pipeline supported by this tool.
+
+What you need from the result:
+
+1. `ready_for_deploy=true` and `status=ready`: ready to run deploy pipeline.
+2. `ready_for_deploy=false` and `status=blocked`: not ready yet.
+3. `next_actions`: exact steps to fix before rerun.
+
+You do not need to choose or manage internal source categories. The command applies internal checks and returns one deploy readiness decision plus actionable next steps.
+
+### 4) Start the tool server in VS Code
+
+Once the config is in place, Copilot can launch the server and call tools such as `whc_prepare`, `whc_deploy`, `whc_verify`, and `whc_rollback`.
+
+### 5) Prepare workspace state once
+
+```powershell
+npm run prepare
+```
+
+This initializes the hidden project state under `.whc` and ensures the workspace ignores local management files.
 
 ## Safety Notes
 
@@ -208,3 +232,5 @@ Notes:
 ## License
 
 ISC
+
+

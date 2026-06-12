@@ -2,7 +2,7 @@
 
 ## Plan Index (Start Here)
 Primary execution plan:
-- `.github/plans/whc-mcp-build-plan.md`
+- `.github/plans/whc-build-plan.md`
 Secondary operations plan:
 - `.github/plans/whc-cicd-flow-sessions.md`
 Use-case and pipeline plan:
@@ -14,6 +14,17 @@ DevOps verify standard:
 Tool contract spec v2:
 - `.github/plans/whc-tool-contract-spec-v2.md`
 
+## MASTER RULE — Non-negotiable, highest priority
+
+**NEVER modify, create, or delete any file under `D:\Source\mytho\` or any `mytho/source` path.**
+
+Reasons:
+1. `mytho/source` has its own dedicated agent. Cross-agent edits cause bugs and gaps that are hard to trace.
+2. Mytho is referenced here as a sample/example only — to learn from and illustrate concepts.
+3. Any change needed in mytho/source must be written as a prompt/instruction for the mytho agent to apply itself.
+
+If a task seems to require touching mytho/source: STOP, write the required change as a prompt, and hand it off. Do not proceed.
+
 Mandatory behavior:
 1. Always consult the plan before implementing any new task.
 2. Map each code change to a specific phase/task in the plan.
@@ -21,7 +32,7 @@ Mandatory behavior:
 4. Prioritize work by the plan's execution order and quality gates.
 
 ## Mission
-Build a production-oriented MCP server for WHC.ca (cPanel) that uses a provider-agnostic orchestration model to enable safe and repeatable Local -> Target workflows.
+Build a production-oriented tool server for WHC.ca (cPanel) that uses a provider-agnostic orchestration model to enable safe and repeatable Local -> Target workflows.
 
 ## Generic Orchestration Model (Must Follow)
 Model deployments in generic domain terms first, then map them onto WHC capabilities.
@@ -54,7 +65,7 @@ Operational truth:
 2. Ongoing deployment loop is Staging test -> Push Staging to Live.
 3. For first-time setup with default WordPress on Live, do not force-delete by default; prefer controlled replacement via staging validation and push.
 
-Design implication for this MCP:
+Design implication for this tool server:
 1. Keep WHC as an adapter layer over the generic orchestration model.
 2. Support both modes explicitly:
 	- Managed WP Clone-and-Sync mode (WHC-native staging).
@@ -82,7 +93,7 @@ Do not add extra tools before MVP tools are fully tested.
 
 ## Tech and Runtime Standards
 - Language: TypeScript on Node.js LTS.
-- Protocol: MCP server using @modelcontextprotocol/sdk.
+- Protocol: tool server using @modelcontextprotocol/sdk.
 - API channel: cPanel UAPI over HTTPS (2083).
 - SSH channel: port 27 only.
 - Config source: local .env only (never hardcode secrets).
@@ -181,7 +192,7 @@ Rules:
 	 - Push Staging to Live
 
 ## Capability Gating
-The MCP must start and operate even if SSH capability is unavailable.
+The tool server must start and operate even if SSH capability is unavailable.
 
 Rules:
 1. Compute capability state at startup: UAPI, SSH.
@@ -214,7 +225,7 @@ Reliability requirements:
 5. Validate host and protocol before outbound calls.
 
 ## Implementation Roadmap (Execution Order)
-Canonical detailed roadmap lives in `.github/plans/whc-mcp-build-plan.md`.
+Canonical detailed roadmap lives in `.github/plans/whc-build-plan.md`.
 
 Phase 1: Foundation and connectivity
 1. Project skeleton and tool registry.
@@ -232,7 +243,7 @@ Phase 3: Monitoring and utility tools
 3. whc_check_health.
 
 Phase 4: Integration
-1. Gemini CLI MCP registration notes.
+1. Gemini CLI tool server registration notes.
 2. High-level aliases/workflows (for example whc-sync-staging).
 
 ## Testing Strategy (Minimum)
@@ -262,3 +273,4 @@ A tool is considered done only when:
 3. Idempotency and audit behavior are implemented for write paths.
 4. Tests cover happy path and critical failures.
 5. Logs are useful and secret-safe.
+

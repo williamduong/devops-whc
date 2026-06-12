@@ -5,22 +5,16 @@ import { ToolRequestEnvelope } from "../contracts/envelope";
 import { sourceProfileSchema } from "./whc-setup-remote";
 
 const payloadSchema = z.object({
-  workflow_mode: z.enum(["managed_clone_sync", "git_controlled"]),
+  workflow_mode: z.enum(["managed_clone_sync"]),
   target_environment: z.enum(["live", "staging"]),
   release_intent: z.enum(["refresh", "deploy", "promote", "migrate", "recover"]),
   pipeline_id: z.enum(["P0", "P1", "P2", "P2R", "P3", "P3D", "P4", "P5"]),
   source_profile: sourceProfileSchema,
 
-  // managed_clone_sync fields
+  // sync fields
   direction: z.enum(["live_to_staging", "staging_to_live"]).optional(),
   sync_scope: z.enum(["files", "database", "everything"]).optional(),
 
-  // git_controlled fields
-  repository_root: z.string().min(1).optional(),
-  branch: z.string().min(1).optional(),
-  rollback_branch: z.string().min(1).optional(),
-
-  // hardening and recovery controls
   backup_reference: z.string().min(1).optional(),
   allow_emergency_without_backup: z.boolean().optional(),
   verify_after_deploy: z.boolean().optional(),

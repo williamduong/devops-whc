@@ -5,7 +5,7 @@ Owner: devops-whc
 Last updated: 2026-06-08
 
 ## 1) Goal
-Standardize a practical WHC delivery workflow for MCP operations across multiple WordPress project shapes and deployment styles:
+Standardize a practical WHC delivery workflow for tool server operations across multiple WordPress project shapes and deployment styles:
 1. Live initialization and domain cutover.
 2. Managed staging clone-and-sync lifecycle.
 3. Project onboarding and migration from provider baseline state.
@@ -54,7 +54,7 @@ Deliverables:
 2. Non-destructive migration recommendation when default WP exists.
 
 Acceptance:
-1. MCP can report live baseline status in one response.
+1. tool server can report live baseline status in one response.
 
 ### Session C - Managed Staging Baseline
 Scope:
@@ -69,7 +69,7 @@ Deliverables:
 3. Refresh-vs-promotion decision guide.
 
 Acceptance:
-1. MCP returns explicit push-to-live warning requirements.
+1. tool server returns explicit push-to-live warning requirements.
 
 ### Session D - Project Onboarding and Migration Strategy
 Scope:
@@ -95,7 +95,7 @@ Migration checklist:
 6. Confirm whether the source is full-site, partial-content, package-only, or artifact-first.
 
 Deliverables:
-1. Migration runbook in MCP responses.
+1. Migration runbook in tool server responses.
 2. Level D confirmation gates for destructive actions.
 
 Acceptance:
@@ -115,10 +115,10 @@ Pattern 2: Git-controlled deployment
 
 Pattern selection rule:
 1. If managed staging exists and sync is used, default to managed_clone_sync.
-2. If staging is folder-based and deployment is Git-first, use git_controlled.
+2. If staging is folder-based, use SSH/SCP + WP-CLI delivery.
 
 Deliverables:
-1. MCP tool metadata includes active workflow mode.
+1. tool metadata includes active workflow mode.
 2. Deploy handler enforces mode-specific rules.
 3. `whc_deploy` decision tree documented by mode and sync direction.
 
@@ -139,10 +139,10 @@ Target actions:
 
 Deliverables:
 1. WP-CLI capability flags.
-2. Policy-safe WP-CLI command allowlist for MCP.
+2. Policy-safe WP-CLI command allowlist for tool server.
 
 Acceptance:
-1. MCP can report WP-CLI availability per environment.
+1. tool server can report WP-CLI availability per environment.
 
 ## 4) CI/CD Action Catalog (WordPress-focused)
 1. source_profile_classify
@@ -174,7 +174,7 @@ Acceptance:
 	- direction `staging_to_live` -> model WHC Push Staging to Live
 	- require sync scope selection: `files`, `database`, `everything`
 	- preserve deploy-unit awareness from source classification
-3. If `workflow_mode = git_controlled`:
+3. Note: git_controlled (cPanel Git UAPI) is not available on WHC Managed WordPress.
 	- use cPanel Git Version Control deployment path
 	- allow full-site, partial-content, package-only, or artifact-first sources
 	- do not pretend to invoke WHC managed staging sync semantics
@@ -191,10 +191,12 @@ Acceptance:
 1. Session A and B first.
 2. Session C and D second.
 3. Session E and F third.
-4. Then bind actions to MCP tools progressively.
+4. Then bind actions to tools progressively.
 
 ## 7) Done Criteria
 1. The project documents and enforces WHC clone-and-sync reality.
 2. The project supports prod/staging split SSH metadata.
 3. The project provides migration guidance for provider-baseline-to-project adoption across multiple project shapes.
 4. The project defines CI/CD actions and WP-CLI checks with safety controls.
+
+

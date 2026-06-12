@@ -76,7 +76,7 @@ export async function executeWhcPrepare(
 
   ensureWorkspaceState(rootDir);
   const gitignoreUpdated = request.payload.ensure_gitignore_rule !== false
-    ? ensureGitignoreRule(rootDir, ".mcp/")
+    ? ensureGitignoreRule(rootDir, ".whc/")
     : false;
 
   if (!existsSync(pipelineStatusFile) || request.payload.force_reinitialize) {

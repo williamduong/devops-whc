@@ -9,8 +9,7 @@ const projectRootHint = process.env.WHC_LOCAL_PROJECT_ROOT;
 const envCandidates = [
   requestedEnvPath,
   projectRootHint ? path.join(projectRootHint, ".vscode", "whc.env") : undefined,
-  projectRootHint ? path.join(projectRootHint, ".mcp", "whc-mcp", "env", "whc.env") : undefined,
-  projectRootHint ? path.join(projectRootHint, ".mcp", "whc.env") : undefined,
+  projectRootHint ? path.join(projectRootHint, ".whc", "env", "whc.env") : undefined,
   path.join(workspaceRoot, ".env"),
 ]
   .filter(Boolean)
@@ -19,7 +18,7 @@ const envCandidates = [
 const envFilePath = envCandidates.find((p) => fs.existsSync(p));
 
 // Load .env manually before importing the compiled server
-// (VS Code Copilot starts the process without any env pre-loaded)
+// (tool clients can start the process without any env pre-loaded)
 if (envFilePath && fs.existsSync(envFilePath)) {
   const parsed = dotenv.parse(fs.readFileSync(envFilePath));
   for (const [key, value] of Object.entries(parsed)) {
@@ -36,7 +35,7 @@ const serverEntryCandidates = [
 
 const serverEntry = serverEntryCandidates.find((p) => fs.existsSync(p));
 if (!serverEntry) {
-  throw new Error("MCP build output not found. Run npm run build before npm run mcp:start.");
+  throw new Error("Build output not found. Run npm run build before npm run start.");
 }
 
 require(serverEntry);
