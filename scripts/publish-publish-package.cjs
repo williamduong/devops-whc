@@ -11,6 +11,11 @@ const hasExplicitTag = extraArgs.some((arg, index) => arg === "--tag" || extraAr
 const defaultTagArgs = !hasExplicitTag && publishPackageJson.version.includes("-") ? ["--tag", "next"] : [];
 const command = ["npm", "publish", ...defaultTagArgs, ...extraArgs].join(" ");
 
+execSync("node scripts/prepare-publish-package.cjs", {
+  cwd: rootDir,
+  stdio: "inherit",
+});
+
 execSync(command, {
   cwd: publishPackageDir,
   stdio: "inherit",

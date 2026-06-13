@@ -62,10 +62,7 @@ function main() {
 
   copyDirFromRoot("dist");
   copyFileFromRoot("scripts/start-whc.cjs");
-  copyFileFromRoot("scripts/prepare-first-time.cjs");
   copyFileToPublish("README.npm.md", "README.md");
-  copyFileFromRoot("AGENT_USAGE.md");
-  copyFileFromRoot("WHC_REQUIREMENTS.md");
   copyFileFromRoot("LICENSE");
 
   console.log("[prepare-publish-package] Synced publish artifacts into packages/devops-whc");

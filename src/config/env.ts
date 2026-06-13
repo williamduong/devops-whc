@@ -2,9 +2,9 @@ import dotenv from "dotenv";
 import { z } from "zod";
 
 if (process.env.WHC_ENV_FILE && process.env.WHC_ENV_FILE.trim().length > 0) {
-  dotenv.config({ path: process.env.WHC_ENV_FILE });
+  dotenv.config({ path: process.env.WHC_ENV_FILE, quiet: true });
 } else {
-  dotenv.config();
+  dotenv.config({ quiet: true });
 }
 
 const envSchema = z.object({

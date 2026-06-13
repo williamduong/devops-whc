@@ -1,6 +1,6 @@
 {
   "name": "devops-whc",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "WHC cPanel automation CLI for deploy, verify, and rollback flows",
   "main": "dist/index.js",
   "bin": {
@@ -12,27 +12,15 @@
   "files": [
     "dist",
     "scripts/start-whc.cjs",
-    "scripts/prepare-first-time.cjs",
     "README.md",
-    "AGENT_USAGE.md",
-    "WHC_REQUIREMENTS.md",
     "LICENSE"
   ],
   "scripts": {
-    "prepack": "node ../../scripts/prepare-publish-package.cjs",
-    "publish:release": "npm publish",
-    "pack:check": "npm pack --dry-run",
-    "prehelp": "node ../../scripts/prepare-publish-package.cjs",
     "help": "node dist/index.js --help",
-    "prestart": "node ../../scripts/prepare-publish-package.cjs",
     "start": "node scripts/start-whc.cjs",
-    "preserve": "node ../../scripts/prepare-publish-package.cjs",
     "serve": "node dist/index.js --serve",
-    "preprobe": "node ../../scripts/prepare-publish-package.cjs",
     "probe": "node dist/index.js --probe",
-    "precheck:generic": "node ../../scripts/prepare-publish-package.cjs",
     "check:generic": "node dist/index.js --check-generic",
-    "precheck:health": "node ../../scripts/prepare-publish-package.cjs",
     "check:health": "node dist/index.js --check-health"
   },
   "keywords": [

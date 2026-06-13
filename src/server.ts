@@ -59,7 +59,7 @@ export async function createWhcToolServer(): Promise<ToolServerLike> {
   const ToolServerClass = sdkModule["M" + "cpServer"] as new (info: { name: string; version: string }) => ToolServerLike;
   const server = new ToolServerClass({
     name: instanceName,
-    version: "1.0.2",
+    version: "1.0.3",
   });
 
   // ── whc_prepare ───────────────────────────────────────────────────────────
