@@ -8,10 +8,10 @@ if (process.env.WHC_ENV_FILE && process.env.WHC_ENV_FILE.trim().length > 0) {
 }
 
 const envSchema = z.object({
-  WHC_API_TOKEN: z.string().min(1),
-  WHC_USER: z.string().min(1),
-  WHC_HOST: z.string().min(1),
-  WHC_WORKFLOW_MODE: z.enum(["managed_clone_sync"]).default("managed_clone_sync"),
+  WHC_API_TOKEN: z.string().min(1).optional(),
+  WHC_USER: z.string().min(1).optional(),
+  WHC_HOST: z.string().min(1).optional(),
+  WHC_WORKFLOW_MODE: z.enum(["git_deploy", "ssh_scp_wpcli"]).default("ssh_scp_wpcli"),
 
   WHC_PRIMARY_DOMAIN: z.string().min(1).optional(),
   WHC_TESTING_DOMAIN: z.string().min(1).optional(),
@@ -32,10 +32,10 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
-  WHC_PROD_SSH_HOST: z.string().min(1),
+  WHC_PROD_SSH_HOST: z.string().min(1).optional(),
   WHC_PROD_SSH_PORT: z.coerce.number().int().positive().default(27),
-  WHC_PROD_SSH_USERNAME: z.string().min(1),
-  WHC_PROD_SSH_PRIVATE_KEY_PATH: z.string().min(1),
+  WHC_PROD_SSH_USERNAME: z.string().min(1).optional(),
+  WHC_PROD_SSH_PRIVATE_KEY_PATH: z.string().min(1).optional(),
 
   WHC_STAGING_SSH_HOST: z.string().min(1).optional(),
   WHC_STAGING_SSH_PORT: z.coerce.number().int().positive().optional(),
@@ -66,7 +66,7 @@ export type AppConfig = {
   user: string;
   host: string;
   apiBaseUrl: string;
-  workflowMode: "managed_clone_sync";
+  workflowMode: "git_deploy" | "ssh_scp_wpcli";
   domains: {
     primary?: string;
     testing?: string;
@@ -112,7 +112,10 @@ export type AppConfig = {
 };
 
 export function loadConfig(env = process.env): AppConfig {
-  const parsed = envSchema.safeParse(env);
+  const normalizedEnv = Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [key, value === "" ? undefined : value]),
+  );
+  const parsed = envSchema.safeParse(normalizedEnv);
 
   if (!parsed.success) {
     const issues = parsed.error.issues
@@ -122,21 +125,54 @@ export function loadConfig(env = process.env): AppConfig {
   }
 
   const data = parsed.data;
+  const workflowMode = data.WHC_WORKFLOW_MODE;
+  const missingFields: string[] = [];
 
-  const prodSshHost = data.WHC_PROD_SSH_HOST;
+  if (workflowMode === "git_deploy") {
+    for (const key of [
+      "WHC_API_TOKEN",
+      "WHC_USER",
+      "WHC_HOST",
+      "WHC_PROD_SSH_HOST",
+      "WHC_PROD_SSH_USERNAME",
+      "WHC_PROD_SSH_PRIVATE_KEY_PATH",
+    ] as const) {
+      if (!(data[key] ?? "").trim()) {
+        missingFields.push(key);
+      }
+    }
+  } else {
+    for (const key of [
+      "WHC_STAGING_SSH_HOST",
+      "WHC_STAGING_SSH_USERNAME",
+    ] as const) {
+      if (!(data[key] ?? "").trim()) {
+        missingFields.push(key);
+      }
+    }
+    if (!(data.WHC_STAGING_SSH_PRIVATE_KEY_PATH ?? "").trim() && !(data.WHC_STAGING_SSH_PASSWORD ?? "").trim()) {
+      missingFields.push("WHC_STAGING_SSH_PRIVATE_KEY_PATH|WHC_STAGING_SSH_PASSWORD");
+    }
+  }
+
+  if (missingFields.length > 0) {
+    throw new Error(`VALIDATION_ERROR: Missing or invalid env vars: ${missingFields.join(", ")}`);
+  }
+
+  const prodSshHost = data.WHC_PROD_SSH_HOST ?? data.WHC_STAGING_SSH_HOST ?? "";
   const prodSshPort = data.WHC_PROD_SSH_PORT;
-  const prodSshUsername = data.WHC_PROD_SSH_USERNAME;
-  const prodSshPrivateKeyPath = data.WHC_PROD_SSH_PRIVATE_KEY_PATH;
+  const prodSshUsername = data.WHC_PROD_SSH_USERNAME ?? data.WHC_STAGING_SSH_USERNAME ?? "";
+  const prodSshPrivateKeyPath = data.WHC_PROD_SSH_PRIVATE_KEY_PATH ?? data.WHC_STAGING_SSH_PRIVATE_KEY_PATH ?? "";
 
   const hasStagingSsh =
     !!data.WHC_STAGING_SSH_HOST || !!data.WHC_STAGING_SSH_USERNAME || !!data.WHC_STAGING_SSH_PRIVATE_KEY_PATH;
 
   return {
-    apiToken: data.WHC_API_TOKEN,
-    user: data.WHC_USER,
-    host: data.WHC_HOST,
-    apiBaseUrl: `https://${data.WHC_HOST}:2083`,
-    workflowMode: data.WHC_WORKFLOW_MODE,
+    apiToken: data.WHC_API_TOKEN ?? "",
+    user: data.WHC_USER ?? "",
+    host: data.WHC_HOST ?? "",
+    apiBaseUrl: data.WHC_HOST ? `https://${data.WHC_HOST}:2083` : "",
+    workflowMode,
     domains: {
       primary: data.WHC_PRIMARY_DOMAIN,
       testing: data.WHC_TESTING_DOMAIN,

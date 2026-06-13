@@ -106,7 +106,7 @@ This tool server must then map the generic model onto WHC according to what the 
 
 ## 3) Primary Workflow Modes
 
-### Mode A: managed_clone_sync
+### Mode A: git_deploy
 Use when:
 1. WHC managed staging exists.
 2. Release process depends on WHC Staging -> Live push.
@@ -330,7 +330,7 @@ Steps:
 9. Post-sync health check.
 
 Entry criteria:
-1. `workflow_mode = managed_clone_sync`
+1. `workflow_mode = git_deploy`
 2. Staging exists.
 
 Exit criteria:
@@ -356,7 +356,7 @@ Steps:
 6. Re-check staging health.
 
 Entry criteria:
-1. `workflow_mode = managed_clone_sync`
+1. `workflow_mode = git_deploy`
 2. Staging exists.
 
 Exit criteria:
@@ -380,7 +380,7 @@ Steps:
 6. Health verification.
 
 Entry criteria:
-1. `workflow_mode = managed_clone_sync`
+1. `workflow_mode = git_deploy`
 
 Exit criteria:
 1. Target code updated and runtime validated.
@@ -391,7 +391,7 @@ Purpose:
 
 Decision rules:
 1. Consume normalized source profile and explicit release intent first.
-2. If `workflow_mode = managed_clone_sync`:
+2. If `workflow_mode = git_deploy`:
    - `direction = live_to_staging` -> route to P2R semantics.
    - `direction = staging_to_live` -> route to P2 semantics.
    - require `sync_scope = files | database | everything`.
@@ -447,13 +447,13 @@ Steps:
 | Condition | Pipeline | Workflow mode |
 | --- | --- | --- |
 | Local project shape must be understood before any deploy | P0 | either |
-| Managed WordPress still on testing domain/bootstrap stage | P1 | managed_clone_sync |
-| Live not yet baselined | P1 | managed_clone_sync |
-| Staging exists but is stale and must be refreshed from Live | P2R | managed_clone_sync |
-| Managed staging exists and release should use WHC sync | P2 | managed_clone_sync |
-| Git repo is configured and deployment is code-first | P3 | managed_clone_sync (then SSH/SCP for code) |
+| Managed WordPress still on testing domain/bootstrap stage | P1 | git_deploy |
+| Live not yet baselined | P1 | git_deploy |
+| Staging exists but is stale and must be refreshed from Live | P2R | git_deploy |
+| Managed staging exists and release should use WHC sync | P2 | git_deploy |
+| Git repo is configured and deployment is code-first | P3 | git_deploy (then SSH/SCP for code) |
 | A deploy request must be routed by mode/direction | P3D | either |
-| Default WP exists and Git project must take over | P4 | managed_clone_sync refresh + SSH/SCP code delivery |
+| Default WP exists and Git project must take over | P4 | git_deploy refresh + SSH/SCP code delivery |
 | Something failed and operator needs diagnosis/recovery | P5 | either |
 
 ## 7) Tool and Action Mapping

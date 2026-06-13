@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { isAbsolute, join } from "node:path";
 
 export const DEFAULT_STATE_ROOT = ".whc";
+const DEFAULT_BOOTSTRAP_ENV_FILE = "whc.env";
+const DEFAULT_BOOTSTRAP_ENV_EXAMPLE_FILE = "whc.env.example";
 
 type WriteTrackInput = {
   rootDir: string;
@@ -38,6 +40,92 @@ export function ensureWorkspaceState(rootDir = process.cwd()): void {
   mkdirSync(envDir, { recursive: true });
 
   ensureGitignoreRule(rootDir, ".whc/");
+}
+
+export type WorkspaceBootstrapResult = {
+  stateRootRelative: string;
+  stateRootAbsolute: string;
+  createdPaths: string[];
+  gitignoreUpdated: boolean;
+  pipelineStatusFile: string;
+  envFile: string;
+  envExampleFile: string;
+};
+
+export type WorkspaceBootstrapOptions = {
+  localProjectRoot?: string;
+  localAppPath?: string;
+};
+
+export function ensureWorkspaceBootstrap(
+  rootDir = process.cwd(),
+  options: WorkspaceBootstrapOptions = {},
+): WorkspaceBootstrapResult {
+  const stateRootAbsolute = resolveStateRoot(rootDir);
+  const stateRootRelative = getRelativeStateRoot();
+  const stateDir = join(stateRootAbsolute, "state");
+  const releasesDir = join(stateDir, "releases");
+  const reportsDir = join(stateDir, "reports");
+  const logsDir = join(stateRootAbsolute, "logs");
+  const envDir = join(stateRootAbsolute, "env");
+  const trackedPaths = [
+    stateRootAbsolute,
+    stateDir,
+    releasesDir,
+    reportsDir,
+    logsDir,
+    envDir,
+  ];
+  const createdPaths: string[] = [];
+
+  for (const dirPath of trackedPaths) {
+    if (!existsSync(dirPath)) {
+      mkdirSync(dirPath, { recursive: true });
+      createdPaths.push(dirPath);
+    }
+  }
+
+  const gitignoreUpdated = ensureGitignoreRule(rootDir, ".whc/");
+  const pipelineStatusFile = getPipelineStatusFile(rootDir);
+  if (!existsSync(pipelineStatusFile)) {
+    writeFileSync(
+      pipelineStatusFile,
+      JSON.stringify(
+        {
+          started: false,
+          completed: false,
+          status: "idle",
+          next_step: "Run a write tool (deploy/setup/backup/ssh) to start tracking.",
+        },
+        null,
+        2,
+      ) + "\n",
+      { encoding: "utf8" },
+    );
+    createdPaths.push(pipelineStatusFile);
+  }
+
+  const envFile = join(envDir, DEFAULT_BOOTSTRAP_ENV_FILE);
+  if (!existsSync(envFile)) {
+    writeFileSync(envFile, buildBootstrapEnvTemplate(rootDir, options), { encoding: "utf8" });
+    createdPaths.push(envFile);
+  }
+
+  const envExampleFile = join(envDir, DEFAULT_BOOTSTRAP_ENV_EXAMPLE_FILE);
+  if (!existsSync(envExampleFile)) {
+    writeFileSync(envExampleFile, buildBootstrapEnvTemplate(rootDir, options), { encoding: "utf8" });
+    createdPaths.push(envExampleFile);
+  }
+
+  return {
+    stateRootRelative,
+    stateRootAbsolute,
+    createdPaths,
+    gitignoreUpdated,
+    pipelineStatusFile,
+    envFile,
+    envExampleFile,
+  };
 }
 
 export function writePipelineStartState(input: WriteTrackInput): void {
@@ -123,21 +211,22 @@ function collectGitChangedFiles(rootDir: string): string[] {
   }
 }
 
-function ensureGitignoreRule(rootDir: string, rule: string): void {
+function ensureGitignoreRule(rootDir: string, rule: string): boolean {
   const gitignorePath = join(rootDir, ".gitignore");
   if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, `${rule}\n`, { encoding: "utf8" });
-    return;
+    return true;
   }
 
   const content = readFileSync(gitignorePath, "utf8");
   const hasRule = content.split(/\r?\n/).some((line) => line.trim() === rule);
   if (hasRule) {
-    return;
+    return false;
   }
 
   const next = content.endsWith("\n") ? `${content}${rule}\n` : `${content}\n${rule}\n`;
   writeFileSync(gitignorePath, next, { encoding: "utf8" });
+  return true;
 }
 
 function safeFileName(value: string): string {
@@ -152,13 +241,57 @@ function defaultNextStep(ok: boolean): string {
 }
 
 export function resolveStateRoot(rootDir = process.cwd()): string {
-  const configured = (process.env.WHC_STATE_ROOT ?? "").trim();
-  const configuredOrDefault = configured.length > 0 ? configured : DEFAULT_STATE_ROOT;
+  const configuredOrDefault = getRelativeStateRoot();
   if (isAbsolute(configuredOrDefault)) {
     return configuredOrDefault;
   }
   const segments = configuredOrDefault.split(/[\\/]+/).filter((part) => part.length > 0);
   return join(rootDir, ...segments);
+}
+
+function getRelativeStateRoot(): string {
+  const configured = (process.env.WHC_STATE_ROOT ?? "").trim();
+  return configured.length > 0 ? configured : DEFAULT_STATE_ROOT;
+}
+
+function buildBootstrapEnvTemplate(rootDir: string, options: WorkspaceBootstrapOptions): string {
+  return [
+    "# Project-local WHC bootstrap env",
+    "# Fill the values needed for this specific deploy workspace.",
+    `WHC_LOCAL_PROJECT_ROOT=${options.localProjectRoot ?? rootDir}`,
+    `WHC_LOCAL_APP_PATH=${options.localAppPath ?? ""}`,
+    "WHC_WORKFLOW_MODE=",
+    "WHC_SOURCE_KIND=full_site",
+    "WHC_DEPLOY_UNIT=raw_source",
+    "WHC_DEFAULT_RELEASE_INTENT=deploy",
+    "",
+    "# Managed WHC mode",
+    "WHC_API_TOKEN=",
+    "WHC_USER=",
+    "WHC_HOST=",
+    "WHC_PROD_PATH=/public_html",
+    "WHC_PROD_SSH_HOST=",
+    "WHC_PROD_SSH_PORT=27",
+    "WHC_PROD_SSH_USERNAME=",
+    "WHC_PROD_SSH_PRIVATE_KEY_PATH=",
+    "",
+    "# Staging/source-driven mode",
+    "WHC_STAGING_DOMAIN=",
+    "WHC_STAGING_PATH=",
+    "WHC_STAGING_SSH_HOST=",
+    "WHC_STAGING_SSH_PORT=27",
+    "WHC_STAGING_SSH_USERNAME=",
+    "WHC_STAGING_SSH_PRIVATE_KEY_PATH=",
+    "WHC_STAGING_SSH_PASSWORD=",
+    "WHC_STAGING_SSH_HOSTKEY=",
+    "",
+    "WHC_REQUIRE_STAGING_CONFIRM=true",
+    "WHC_WARN_DYNAMIC_DATA_SYNC=true",
+    "WHC_ENFORCE_STAGING_FIRST=true",
+    "WHC_API_TIMEOUT_MS=15000",
+    "WHC_SSH_TIMEOUT_MS=10000",
+    "",
+  ].join("\n");
 }
 
 export function getPipelineStatusFile(rootDir = process.cwd()): string {

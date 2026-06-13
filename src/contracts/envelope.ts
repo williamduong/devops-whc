@@ -44,7 +44,7 @@ export interface ToolResponseEnvelope<TData> {
     latency_ms?: number;
     retry_count?: number;
     safety_level: SafetyLevel;
-    workflow_mode?: "managed_clone_sync";
+    workflow_mode?: "git_deploy" | "ssh_scp_wpcli";
     pipeline_id?: PipelineId;
     release_intent?: ReleaseIntent;
     source_profile?: SourceProfile;

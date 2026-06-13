@@ -16,11 +16,12 @@ Use WHC CLI to run a safe release flow:
 
 The server supports two workflow modes:
 
-1. `managed_clone_sync`
+1. `git_deploy`
+2. `ssh_scp_wpcli`
 
-Most WHC managed WordPress flows use `managed_clone_sync`.
-
-If server env sets `WHC_WORKFLOW_MODE=managed_clone_sync`, treat staging as managed-only.
+`git_deploy` means local source is pushed to a cPanel-managed Git repository and deployment is triggered from that repository.
+`ssh_scp_wpcli` means source-first delivery over SSH/SCP with runtime bootstrap via WP-CLI and smoke gating.
+If `WHC_WORKFLOW_MODE` is omitted, default to `ssh_scp_wpcli`.
 
 ## 2.2 Tool Server Registration Standard
 
@@ -106,7 +107,7 @@ Always collect these first:
 
 1. Active workflow mode.
 2. Target environment (`staging` or `live`).
-3. Direction (for managed clone/sync):
+3. Direction (for git-driven environment operations):
    - `live_to_staging`
    - `staging_to_live`
 4. Sync scope:
@@ -125,8 +126,9 @@ User/operator must do manually (once per environment):
 Agent can automate repeatedly:
 1. Validate context and run dry-run checks.
 2. Create/list repository via `whc_setup_remote`.
-3. Trigger deployment via `whc_deploy`.
-4. Execute safe runtime probes and logs/health collection.
+3. Push local source to the cPanel-managed Git repository.
+4. Trigger deployment via `whc_deploy`.
+5. Execute safe runtime probes and logs/health collection.
 
 Hybrid step:
 1. `git push` may be run by agent from local terminal when keys/permissions are ready; otherwise operator performs push manually.
@@ -148,6 +150,14 @@ Hybrid step:
 6. `whc_verify` to produce technical verify report.
 7. Run smoke checks outside or via allowed tool path.
 8. If staging passes, run promote flow for live with explicit direction and backup policy.
+
+For `ssh_scp_wpcli` projects, replace steps 4-7 with the project-local source pipeline:
+1. doctor
+2. backup
+3. SCP code sync
+4. WP-CLI runtime bootstrap
+5. seed/bootstrap
+6. smoke gate
 
 ## 6.4 Rollback (Level D) Contract
 
@@ -176,14 +186,14 @@ Example rollback preview payload:
 
 ## 6. Canonical Payloads
 
-### 6.1 Staging dry-run (managed clone/sync refresh)
+### 6.1 Staging dry-run (git_deploy refresh contract)
 
 ```json
 {
   "dry_run": true,
   "confirmed": true,
   "payload": {
-    "workflow_mode": "managed_clone_sync",
+    "workflow_mode": "git_deploy",
     "target_environment": "staging",
     "release_intent": "refresh",
     "pipeline_id": "P3D",
@@ -199,13 +209,13 @@ Example rollback preview payload:
 }
 ```
 
-### 6.2 Staging real refresh sync (managed clone/sync)
+### 6.2 Staging real refresh operation (git_deploy contract)
 
 ```json
 {
   "confirmed": true,
   "payload": {
-    "workflow_mode": "managed_clone_sync",
+    "workflow_mode": "git_deploy",
     "target_environment": "staging",
     "release_intent": "refresh",
     "pipeline_id": "P3D",
@@ -227,7 +237,7 @@ Example rollback preview payload:
 {
   "confirmed": true,
   "payload": {
-    "workflow_mode": "managed_clone_sync",
+    "workflow_mode": "git_deploy",
     "target_environment": "live",
     "release_intent": "promote",
     "pipeline_id": "P3D",
@@ -260,8 +270,8 @@ If preconditions fail (plugin/page/routes absent), gate must be `HOLD`.
 
 Treat these as two different operations:
 
-1. Environment refresh:
-  - `workflow_mode=managed_clone_sync`
+1. Environment refresh contract:
+  - `workflow_mode=git_deploy`
   - `direction=live_to_staging`
   - `release_intent=refresh`
 2. Release deploy to staging:
@@ -269,7 +279,8 @@ Treat these as two different operations:
 
 Policy note:
 
-1. `managed_clone_sync + live_to_staging + release_intent=deploy` is blocked by policy because it causes release-testing ambiguity.
+1. `git_deploy + live_to_staging + release_intent=deploy` is blocked by policy because it causes release-testing ambiguity.
+2. `ssh_scp_wpcli` is the correct mindset for `mytho/source` style release delivery, but `whc_deploy` currently only offers readiness/dry-run guidance for that mode. Real execution should stay in the project-local deploy script until the source-specific handler lands.
 
 ## 8. Troubleshooting
 

@@ -1,0 +1,43 @@
+WHC Generic Boundary Notes
+
+Non-negotiable scope rule:
+- Do not modify, create, or delete anything under D:\Source\mytho\ or any mytho/source path.
+- Mytho is sample/reference only.
+- Any mytho/source change must be handed to the mytho agent as a prompt.
+
+Generic source preparation rules for WHC-bound WordPress projects:
+- Treat the repo as code-only: plugin code, theme code, seed/bootstrap scripts, and deployment scripts.
+- Treat WordPress core, wp-config.php, uploads, cache, and third-party plugins as runtime state unless the project explicitly owns them.
+- Prefer git_deploy when using cPanel-managed Git repository deployment.
+- Use SSH/SCP plus WP-CLI for code delivery and runtime bootstrap when repository-driven deployment does not cover the app state.
+- Keep env values and operational notes in this repo; keep source mutations out of mytho/source.
+
+Files modified in devops-whc during generic policy cleanup:
+- .env.example
+- .github/copilot-instructions.md
+- .github/plans/whc-cicd-flow-sessions.md
+- .github/plans/whc-build-plan.md
+- .github/plans/whc-use-cases-and-pipelines.md
+- AGENT_USAGE.md
+- README.md
+- src/config/env.ts
+- src/contracts/envelope.ts
+- src/handlers/whc-deploy.ts
+- src/schemas/whc-deploy.ts
+- src/server.ts
+- src/services/deploy-runtime-ops.ts
+- tests/deploy-runtime-ops.test.ts
+- tests/env.test.ts
+- tests/whc-db-backup.test.ts
+- tests/whc-deploy.test.ts
+- tests/whc-get-logs.test.ts
+- tests/whc-pipeline-status.test.ts
+- tests/whc-prepare.test.ts
+- tests/whc-rollback.test.ts
+- tests/whc-setup-remote.test.ts
+- tests/whc-ssh-exec.test.ts
+- tests/whc-verify.test.ts
+
+Current validation state:
+- Typecheck passed.
+- Test suite passed: 16 files, 82 tests.

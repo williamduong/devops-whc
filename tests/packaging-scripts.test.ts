@@ -22,6 +22,7 @@ describe("packaging scripts", () => {
     };
 
     expect(pkg.scripts?.start).toBe("node scripts/start-whc.cjs");
+    expect(pkg.scripts?.["check:generic"]).toBe("node dist/index.js --check-generic");
     expect(pkg.files).toContain("scripts/start-whc.cjs");
     expect(pkg.files).toContain("AGENT_USAGE.md");
     expect(pkg.files).toContain("WHC_REQUIREMENTS.md");

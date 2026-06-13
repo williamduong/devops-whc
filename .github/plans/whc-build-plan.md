@@ -26,14 +26,14 @@ In scope (MVP):
 Ship a production-ready tool server for WHC cPanel operations with safe Local -> Staging -> Production workflows and strong operational guardrails.
 Out of scope (post-MVP):
 1. Advanced dashboard UI.
-2. Fully automated managed sync reverse rollback.
+2. Fully automated git deploy reverse rollback.
 3. Multi-tenant policy inheritance.
 
 ## 2.1) WHC Environment Semantics (Critical)
 1. WHC Managed WordPress staging is created from Live first.
 2. Deployment lifecycle is clone/sync oriented, not strict isolated CI pipeline.
 3. The tool server must support both workflow modes:
-   - managed_clone_sync: Live -> Staging clone, Staging -> Live push.
+   - git_deploy: Live -> Staging clone, Staging -> Live push.
    - SSH/SCP file transfer + WP-CLI: direct file delivery to target path.
 4. Tool outputs must include workflow mode and target environment metadata.
 
@@ -99,7 +99,7 @@ Tasks:
 4. Implement SSH client bootstrap on port 27.
 5. Add probe commands and structured probe results.
 6. Add startup capability state (`uapi_available`, `ssh_available`).
-7. Add workflow mode enum (`managed_clone_sync`, `git_controlled`).
+7. Add workflow mode enum (`git_deploy`, `git_controlled`).
 8. Define normalized source-profile and target-profile types for later handlers.
 
 Exit criteria:
@@ -151,7 +151,7 @@ Tasks by tool:
    - Normalize project source, release intent, and target mapping.
    - Invoke the correct delivery mechanism for the chosen workflow mode.
    - Validate source/target mapping, branch or artifact target, and direction/scope where applicable.
-   - Apply workflow-mode-specific rules ((`managed_clone_sync`)).
+   - Apply workflow-mode-specific rules ((`git_deploy`)).
 3. whc_ssh_exec
    - Execute safe command set via SSH.
    - Block denied command patterns by policy.

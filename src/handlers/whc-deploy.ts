@@ -14,7 +14,7 @@ export type DeployOutcome =
 
 export interface WhcDeployData {
   outcome: DeployOutcome;
-  workflow_mode: "managed_clone_sync";
+  workflow_mode: "git_deploy" | "ssh_scp_wpcli";
   target_environment: string;
   direction?: string;
   sync_scope?: string;
@@ -104,12 +104,12 @@ export async function executeWhcDeploy(
   const warnings: string[] = [];
 
   if ((config.safety.enforceStagingFirst ?? true) && target_environment === "live") {
-    const isManagedPromoteFlow =
-      workflow_mode === "managed_clone_sync" &&
+    const isGitPromoteFlow =
+      workflow_mode === "git_deploy" &&
       direction === "staging_to_live" &&
       release_intent === "promote";
 
-    if (!isManagedPromoteFlow) {
+    if (!isGitPromoteFlow) {
       return buildErrorResponse(
         actionIdFactory(),
         startedAt,
@@ -121,7 +121,7 @@ export async function executeWhcDeploy(
           "Required payload shape for live target:",
           JSON.stringify(
             {
-              workflow_mode: "managed_clone_sync",
+              workflow_mode: "git_deploy",
               target_environment: "live",
               release_intent: "promote",
               direction: "staging_to_live",
@@ -134,19 +134,77 @@ export async function executeWhcDeploy(
     }
   }
 
+  if (workflow_mode === "ssh_scp_wpcli") {
+    const sourceScriptHint = [
+      "ssh_scp_wpcli execution is not implemented in whc_deploy yet.",
+      "This workflow is modeled after mytho/source where deploy is:",
+      "1. doctor",
+      "2. backup",
+      "3. scp code sync",
+      "4. wp-cli runtime bootstrap",
+      "5. wp eval-file seed/bootstrap",
+      "6. HTTP/API smoke",
+      "Use the project-local pipeline script for real execution until source-specific deploy integration lands.",
+    ].join("\n");
+
+    if (request.dry_run) {
+      const phaseCoverage = buildPhaseCoverage({
+        workflowMode: workflow_mode,
+        syncScope: sync_scope,
+        verifyStatus: "skipped",
+        dryRun: true,
+      });
+      return {
+        ok: true,
+        action_id: actionIdFactory(),
+        tool: "whc_deploy",
+        data: {
+          outcome: "dry_run_preview",
+          workflow_mode,
+          target_environment,
+          direction,
+          sync_scope,
+          lock_key: deployLockKey,
+          backup_reference,
+          pipeline_status: derivePipelineStatus(phaseCoverage),
+          phase_coverage: phaseCoverage,
+          warnings: [...warnings, sourceScriptHint],
+        },
+        error: null,
+        meta: {
+          latency_ms: Date.now() - startedAt,
+          safety_level: effectiveSafetyLevel,
+          workflow_mode,
+          pipeline_id,
+          release_intent,
+          source_profile,
+          delivery_mechanism: "file_transfer",
+        },
+      };
+    }
+
+    return buildErrorResponse(
+      actionIdFactory(),
+      startedAt,
+      effectiveSafetyLevel,
+      "BUSINESS_POLICY_BLOCKED",
+      sourceScriptHint,
+    );
+  }
+
   if (config.safety.warnDynamicDataSync && sync_scope === "database") {
     warnings.push("DATABASE sync detected — existing data on target will be overwritten. Ensure a backup exists before proceeding.");
   }
   if (config.safety.warnDynamicDataSync && sync_scope === "everything") {
     warnings.push("FULL sync (files + database) detected — all data on target will be replaced. This is irreversible without a backup.");
   }
-  if (workflow_mode === "managed_clone_sync" && release_intent === "deploy" && direction === "live_to_staging") {
+  if (workflow_mode === "git_deploy" && release_intent === "deploy" && direction === "live_to_staging") {
     return buildErrorResponse(
       actionIdFactory(),
       startedAt,
       effectiveSafetyLevel,
       "BUSINESS_POLICY_BLOCKED",
-      "Invalid deploy mindset: managed live_to_staging is an environment refresh, not a release deploy. Use release_intent='refresh' for live_to_staging.",
+      "Invalid deploy mindset: git_deploy + live_to_staging is an environment refresh, not a release deploy. Use release_intent='refresh' for live_to_staging.",
     );
   }
   if (direction === "live_to_staging" && sync_scope !== "files") {
@@ -168,6 +226,7 @@ export async function executeWhcDeploy(
   // Dry run: return preview without making changes
   if (request.dry_run) {
     const phaseCoverage = buildPhaseCoverage({
+      workflowMode: workflow_mode,
       syncScope: sync_scope,
       verifyStatus: "skipped",
       dryRun: true,
@@ -196,7 +255,7 @@ export async function executeWhcDeploy(
         pipeline_id,
         release_intent,
         source_profile,
-        delivery_mechanism: "managed_sync",
+        delivery_mechanism: "git_deploy",
       },
     };
   }
@@ -213,12 +272,12 @@ export async function executeWhcDeploy(
   }
 
   try {
-    // managed_clone_sync mode: use WHC staging sync
+    // git_deploy mode: use cPanel-managed git deployment flow
     if (!direction) {
-      return buildErrorResponse(actionIdFactory(), startedAt, effectiveSafetyLevel, "VALIDATION_ERROR", "managed_clone_sync mode requires 'direction' field.");
+      return buildErrorResponse(actionIdFactory(), startedAt, effectiveSafetyLevel, "VALIDATION_ERROR", "git_deploy mode requires 'direction' field.");
     }
 
-      // WHC managed sync is represented with guarded intent + recovery contract.
+      // Git deploy is represented with guarded intent + recovery contract.
       const outcome: DeployOutcome = direction === "live_to_staging" ? "synced_live_to_staging" : "synced_staging_to_live";
       let verifyStatus: "skipped" | "passed" | "failed" = "skipped";
       let rollbackStatus: "not_needed" | "attempted" | "succeeded" | "failed" = "not_needed";
@@ -245,6 +304,7 @@ export async function executeWhcDeploy(
       }
 
       const phaseCoverage = buildPhaseCoverage({
+        workflowMode: workflow_mode,
         syncScope: sync_scope,
         verifyStatus,
         dryRun: false,
@@ -276,7 +336,7 @@ export async function executeWhcDeploy(
           pipeline_id,
           release_intent,
           source_profile,
-          delivery_mechanism: "managed_sync",
+        delivery_mechanism: "git_deploy",
         },
       };
   } finally {
@@ -302,6 +362,7 @@ function buildErrorResponse(
 }
 
 function buildPhaseCoverage(input: {
+  workflowMode: "git_deploy" | "ssh_scp_wpcli";
   syncScope?: string;
   verifyStatus: "skipped" | "passed" | "failed";
   dryRun: boolean;
@@ -318,10 +379,17 @@ function buildPhaseCoverage(input: {
   if (input.syncScope === "database" || input.syncScope === "everything") {
     dataState = input.dryRun ? "excluded" : "included";
   }
-  notes.push(
-    "managed_clone_sync does not bootstrap app runtime configuration (plugin/theme activation, rewrite, Woo setup).",
-    "Managed verification is transport-level unless additional runtime checks are run externally.",
-  );
+  if (input.workflowMode === "git_deploy") {
+    notes.push(
+      "git_deploy covers repository-driven deployment mechanics, not app runtime bootstrap (plugin/theme activation, rewrite, Woo setup).",
+      "Git deployment verification is transport-level unless additional runtime checks are run externally.",
+    );
+  } else {
+    notes.push(
+      "ssh_scp_wpcli is expected to cover code sync, WP-CLI runtime bootstrap, seed/bootstrap, and smoke gating.",
+      "whc_deploy does not execute that source-specific flow yet; use a project-local pipeline script for real runs today.",
+    );
+  }
 
   if (input.dryRun) {
     notes.push("dry_run preview only; no target state has been changed.");

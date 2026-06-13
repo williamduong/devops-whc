@@ -18,8 +18,8 @@ export async function runDeployVerification(
   _request: WhcDeployRequest,
   _sshClient: WhcSshClient,
 ): Promise<RuntimeVerifyResult> {
-  // Verification for managed_clone_sync is transport-level only.
-  return { ok: true, message: "Verification passed for managed_clone_sync mode" };
+  // Verification for git_deploy is transport-level only.
+  return { ok: true, message: "Verification passed for git_deploy mode" };
 }
 
 export async function runDeployRollback(

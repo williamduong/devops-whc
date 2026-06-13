@@ -9,7 +9,7 @@ const baseConfig = {
   user: "bbcyvf27",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "managed_clone_sync" as const,
+  workflowMode: "git_deploy" as const,
   domains: { primary: "example.com" },
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {
@@ -41,20 +41,38 @@ describe("whc_deploy schema", () => {
       validateWhcDeployRequest({
         request_id: "r1",
         actor: { kind: "copilot" },
-        payload: { workflow_mode: "managed_clone_sync", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging" },
+        payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging" },
       }),
     ).toThrow(/VALIDATION_ERROR/);
   });
 
-  it("accepts valid managed_clone_sync request", () => {
+  it("accepts valid git_deploy request", () => {
     const req = validateWhcDeployRequest({
       request_id: "r1",
       actor: { kind: "copilot" },
       confirmed: true,
       idempotency_key: "idem-1",
-      payload: { workflow_mode: "managed_clone_sync", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
+      payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
     });
-    expect(req.payload.workflow_mode).toBe("managed_clone_sync");
+    expect(req.payload.workflow_mode).toBe("git_deploy");
+  });
+
+  it("accepts ssh_scp_wpcli request shape", () => {
+    const req = validateWhcDeployRequest({
+      request_id: "r-ssh-scp",
+      actor: { kind: "copilot" },
+      dry_run: true,
+      confirmed: true,
+      idempotency_key: "idem-ssh-scp",
+      payload: {
+        workflow_mode: "ssh_scp_wpcli",
+        target_environment: "staging",
+        release_intent: "deploy",
+        pipeline_id: "P3D",
+        source_profile: sourceProfile,
+      },
+    });
+    expect(req.payload.workflow_mode).toBe("ssh_scp_wpcli");
   });
 });
 
@@ -86,7 +104,7 @@ describe("executeWhcDeploy", () => {
         dry_run: true,
         confirmed: true,
         idempotency_key: "idem-1",
-        payload: { workflow_mode: "managed_clone_sync", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
+        payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
       },
       { uapiClient: mockUapiClient() },
     );
@@ -113,7 +131,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-live-managed-block",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "live",
           release_intent: "deploy",
           pipeline_id: "P3D",
@@ -146,7 +164,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-live-promote-allow",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "live",
           release_intent: "promote",
           pipeline_id: "P3D",
@@ -162,7 +180,7 @@ describe("executeWhcDeploy", () => {
     expect(result.data?.outcome).toBe("synced_staging_to_live");
   });
 
-  it("returns synced_live_to_staging for managed_clone_sync refresh", async () => {
+  it("returns synced_live_to_staging for git_deploy refresh", async () => {
     const result = await executeWhcDeploy(
       baseConfig,
       {
@@ -170,7 +188,7 @@ describe("executeWhcDeploy", () => {
         actor: { kind: "copilot" },
         confirmed: true,
         idempotency_key: "idem-1",
-        payload: { workflow_mode: "managed_clone_sync", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
+        payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
       },
       { uapiClient: mockUapiClient() },
     );
@@ -190,7 +208,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-mindset-block",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "staging",
           release_intent: "deploy",
           pipeline_id: "P3D",
@@ -215,7 +233,7 @@ describe("executeWhcDeploy", () => {
         actor: { kind: "copilot" },
         confirmed: true,
         idempotency_key: "idem-1",
-        payload: { workflow_mode: "managed_clone_sync", target_environment: "live", release_intent: "promote", pipeline_id: "P3D", source_profile: sourceProfile, direction: "staging_to_live", sync_scope: "database", backup_reference: "backup-1" },
+        payload: { workflow_mode: "git_deploy", target_environment: "live", release_intent: "promote", pipeline_id: "P3D", source_profile: sourceProfile, direction: "staging_to_live", sync_scope: "database", backup_reference: "backup-1" },
       },
       { uapiClient: mockUapiClient() },
     );
@@ -233,7 +251,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-gate",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "live",
           release_intent: "promote",
           pipeline_id: "P3D",
@@ -258,7 +276,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-gate-ok",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "live",
           release_intent: "promote",
           pipeline_id: "P3D",
@@ -288,7 +306,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-lock",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "staging",
           release_intent: "refresh",
           pipeline_id: "P2R",
@@ -315,7 +333,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-verify-fail",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "staging",
           release_intent: "refresh",
           pipeline_id: "P2R",
@@ -346,7 +364,7 @@ describe("executeWhcDeploy", () => {
         confirmed: true,
         idempotency_key: "idem-verify-rollback",
         payload: {
-          workflow_mode: "managed_clone_sync",
+          workflow_mode: "git_deploy",
           target_environment: "staging",
           release_intent: "refresh",
           pipeline_id: "P2R",
@@ -369,5 +387,60 @@ describe("executeWhcDeploy", () => {
 
     expect(result.ok).toBe(false);
     expect(rollbackCalled).toBe(true);
+  });
+
+  it("returns dry-run preview for ssh_scp_wpcli with a source-script warning", async () => {
+    const result = await executeWhcDeploy(
+      {
+        ...baseConfig,
+        workflowMode: "ssh_scp_wpcli",
+      },
+      {
+        request_id: "r-ssh-preview",
+        actor: { kind: "copilot" },
+        dry_run: true,
+        confirmed: true,
+        idempotency_key: "idem-ssh-preview",
+        payload: {
+          workflow_mode: "ssh_scp_wpcli",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+        },
+      },
+      { uapiClient: mockUapiClient() },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data?.outcome).toBe("dry_run_preview");
+    expect(result.data?.warnings.some((warning) => warning.includes("project-local pipeline script"))).toBe(true);
+  });
+
+  it("blocks real ssh_scp_wpcli deploy until the execution path is implemented", async () => {
+    const result = await executeWhcDeploy(
+      {
+        ...baseConfig,
+        workflowMode: "ssh_scp_wpcli",
+      },
+      {
+        request_id: "r-ssh-blocked",
+        actor: { kind: "copilot" },
+        confirmed: true,
+        idempotency_key: "idem-ssh-blocked",
+        payload: {
+          workflow_mode: "ssh_scp_wpcli",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+        },
+      },
+      { uapiClient: mockUapiClient() },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
+    expect(result.error?.message).toMatch(/execution is not implemented/);
   });
 });

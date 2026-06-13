@@ -5,7 +5,7 @@ import { ToolRequestEnvelope } from "../contracts/envelope";
 import { sourceProfileSchema } from "./whc-setup-remote";
 
 const payloadSchema = z.object({
-  workflow_mode: z.enum(["managed_clone_sync"]),
+  workflow_mode: z.enum(["git_deploy", "ssh_scp_wpcli"]),
   target_environment: z.enum(["live", "staging"]),
   release_intent: z.enum(["refresh", "deploy", "promote", "migrate", "recover"]),
   pipeline_id: z.enum(["P0", "P1", "P2", "P2R", "P3", "P3D", "P4", "P5"]),

@@ -114,7 +114,7 @@ Pattern 2: Git-controlled deployment
 2. Optional post-deploy WP-CLI steps.
 
 Pattern selection rule:
-1. If managed staging exists and sync is used, default to managed_clone_sync.
+1. If managed staging exists and sync is used, default to git_deploy.
 2. If staging is folder-based, use SSH/SCP + WP-CLI delivery.
 
 Deliverables:
@@ -169,7 +169,7 @@ Acceptance:
 
 ## 4.2) `whc_deploy` Decision Tree
 1. Normalize source profile and release intent first.
-2. If `workflow_mode = managed_clone_sync`:
+2. If `workflow_mode = git_deploy`:
 	- direction `live_to_staging` -> model WHC Copy Live to Staging
 	- direction `staging_to_live` -> model WHC Push Staging to Live
 	- require sync scope selection: `files`, `database`, `everything`

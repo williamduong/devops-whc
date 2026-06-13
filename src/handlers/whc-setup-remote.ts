@@ -56,7 +56,7 @@ export async function executeWhcSetupRemote(
     if (isStaging) {
       lines.push(
         "WHC managed staging uses a separate cPanel account; git repo setup via this user's UAPI cannot target it.",
-        "Use managed_clone_sync mode to sync staging from live, or configure dedicated staging credentials.",
+        "Use git_deploy mode to drive repository-based staging refresh/deploy flows, or configure dedicated staging credentials.",
       );
     } else {
       const suggestedPayload = buildSuggestedSetupRemotePayload(request, config.user);

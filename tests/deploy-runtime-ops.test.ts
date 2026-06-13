@@ -8,7 +8,7 @@ const baseConfig = {
   user: "user",
   host: "host.example.com",
   apiBaseUrl: "https://host.example.com:2083",
-  workflowMode: "managed_clone_sync" as const,
+  workflowMode: "git_deploy" as const,
   domains: { primary: "example.com" },
   paths: { prod: "/home/prod/public_html" },
   sourceProfile: {
@@ -30,7 +30,7 @@ const baseRequest = {
   confirmed: true,
   idempotency_key: "idem-1",
   payload: {
-    workflow_mode: "managed_clone_sync" as const,
+    workflow_mode: "git_deploy" as const,
     target_environment: "live" as const,
     release_intent: "deploy" as const,
     pipeline_id: "P3" as const,
@@ -64,10 +64,10 @@ function mockUapi(ok = true): WhcUapiClient {
 }
 
 describe("runDeployVerification", () => {
-  it("always passes for managed_clone_sync", async () => {
+  it("always passes for git_deploy", async () => {
     const result = await runDeployVerification(baseConfig, baseRequest, mockSsh(""));
     expect(result.ok).toBe(true);
-    expect(result.message).toMatch(/managed_clone_sync/i);
+    expect(result.message).toMatch(/git_deploy/i);
   });
 });
 

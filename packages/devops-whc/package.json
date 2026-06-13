@@ -30,6 +30,8 @@
     "serve": "node dist/index.js --serve",
     "preprobe": "node ../../scripts/prepare-publish-package.cjs",
     "probe": "node dist/index.js --probe",
+    "precheck:generic": "node ../../scripts/prepare-publish-package.cjs",
+    "check:generic": "node dist/index.js --check-generic",
     "precheck:health": "node ../../scripts/prepare-publish-package.cjs",
     "check:health": "node dist/index.js --check-health"
   },
