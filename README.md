@@ -2,7 +2,7 @@
 
 WHC cPanel automation CLI for deploy, verify, rollback, logs, backup, and health flows.
 
-Current workspace version: 1.0.2-next
+Current workspace version: 1.0.2
 
 ## Publish Package Layout
 

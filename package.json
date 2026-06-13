@@ -1,6 +1,6 @@
 {
   "name": "devops-whc-workspace",
-  "version": "1.0.2-next",
+  "version": "1.0.2",
   "description": "WHC cPanel automation CLI for deploy, verify, and rollback flows",
   "private": true,
   "main": "dist/index.js",
