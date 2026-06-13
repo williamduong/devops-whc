@@ -105,7 +105,7 @@ Current boundary:
 
 1. `whc_setup_remote` is ready for remote Git repository setup.
 2. `check:generic` is the main trustworthy readiness gate for both workflow modes.
-3. `whc_deploy` contract for `git_deploy` is still being aligned to the real cPanel deployment-task execution path.
+3. `whc_deploy` for `git_deploy` triggers the real cPanel deployment task for a given `repository_root` and optional `branch`.
 4. `whc_deploy` does not yet execute the full `ssh_scp_wpcli` runtime pipeline; keep that in project-local scripts for now.
 
 ## 3. Required Context Before Any Write
@@ -129,8 +129,9 @@ Agent can automate repeatedly:
 1. Validate context and run dry-run checks.
 2. Create/list repository via `whc_setup_remote`.
 3. Push local source to the cPanel-managed Git repository when credentials are available.
-4. Execute safe runtime probes and logs/health collection.
-5. Run source-compatibility checks and hidden-state bootstrap for a specific project root.
+4. Trigger deployment via `whc_deploy` for the intended `repository_root` and optional `branch`.
+5. Execute safe runtime probes and logs/health collection.
+6. Run source-compatibility checks and hidden-state bootstrap for a specific project root.
 
 Hybrid step:
 1. `git push` may be run by agent from local terminal when keys/permissions are ready; otherwise operator performs push manually.
@@ -201,7 +202,8 @@ Agent expectations today:
 1. validate readiness with `check:generic`
 2. ensure remote repo exists with `whc_setup_remote`
 3. push with local Git
-4. do not overstate `whc_deploy` as complete end-to-end execution until that handler is finished
+4. trigger the cPanel deployment task with `whc_deploy`
+5. do not overstate this as WordPress runtime bootstrap; that still belongs to separate checks/scripts
 
 ### 6.2 `ssh_scp_wpcli`
 

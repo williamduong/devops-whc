@@ -290,8 +290,8 @@ Important current boundary:
 1. `check:generic` is the main trustworthy gate for source compatibility and hidden-state bootstrap.
 2. `whc_setup_remote` is for wiring remote Git repository metadata on cPanel.
 3. `ssh_scp_wpcli` is the default workflow mode for `mytho/source`.
-4. `whc_deploy` is not yet the end-to-end executor for the `mytho/source` SCP/WP-CLI pipeline.
-5. `git_deploy` naming now means local Git push plus cPanel deployment-task flow. If you release this package today, treat that mode as contract/readiness-oriented until the real deploy handler is finished.
+4. `git_deploy` now triggers the cPanel deployment task for the requested `repository_root` and optional `branch`.
+5. `whc_deploy` is still not the end-to-end executor for the `mytho/source` SCP/WP-CLI pipeline.
 
 What you need from the result:
 
@@ -344,12 +344,31 @@ Publish only after the dry-run looks correct:
 npm run publish:npm
 ```
 
+## NPM Auth
+
+Authenticate npm on this machine before the real publish:
+
+```powershell
+npm whoami
+npm login
+npm whoami
+```
+
+If your org uses browser-based auth, npm may open a web flow after `npm login`.
+
+Useful checks:
+
+```powershell
+npm config get registry
+npm access ls-packages
+```
+
 Release notes:
 
 1. `npm run publish:npm` publishes from `packages/devops-whc`, not from repository root.
 2. For prerelease versions like `1.0.2-next`, the publish script automatically uses dist-tag `next`.
 3. Do not run `npm publish` directly from the repository root package.
-4. Be explicit in release notes that `ssh_scp_wpcli` is the default mode and `git_deploy` is still being aligned to the real cPanel deployment execution path.
+4. Be explicit in release notes that `ssh_scp_wpcli` is the default mode for `mytho/source`, while `git_deploy` is the repository-driven cPanel deployment path.
 
 ## License
 
