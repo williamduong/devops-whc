@@ -20,6 +20,13 @@ function copyFileFromRoot(relativePath) {
   fs.copyFileSync(src, dest);
 }
 
+function copyFileToPublish(relativeSrcPath, relativeDestPath) {
+  const src = path.join(rootDir, relativeSrcPath);
+  const dest = path.join(publishPackageDir, relativeDestPath);
+  ensureDir(path.dirname(dest));
+  fs.copyFileSync(src, dest);
+}
+
 function copyDirFromRoot(relativePath) {
   const src = path.join(rootDir, relativePath);
   const dest = path.join(publishPackageDir, relativePath);
@@ -56,7 +63,7 @@ function main() {
   copyDirFromRoot("dist");
   copyFileFromRoot("scripts/start-whc.cjs");
   copyFileFromRoot("scripts/prepare-first-time.cjs");
-  copyFileFromRoot("README.md");
+  copyFileToPublish("README.npm.md", "README.md");
   copyFileFromRoot("AGENT_USAGE.md");
   copyFileFromRoot("WHC_REQUIREMENTS.md");
   copyFileFromRoot("LICENSE");
