@@ -176,14 +176,25 @@ You do not have to call custom script files manually in normal usage. The wrappe
 
 ## Required Environment Variables
 
-Set these in your local `.env` file:
+Base config:
+
+- `WHC_WORKFLOW_MODE`
+- `WHC_LOCAL_PROJECT_ROOT`
+
+For `git_deploy`:
 
 - `WHC_API_TOKEN`
 - `WHC_USER`
 - `WHC_HOST`
-- `WHC_PROD_SSH_HOST`
-- `WHC_PROD_SSH_USERNAME`
-- `WHC_PROD_SSH_PRIVATE_KEY_PATH`
+- `WHC_PROD_PATH`
+
+For `ssh_scp_wpcli`:
+
+- `WHC_STAGING_SSH_HOST`
+- `WHC_STAGING_SSH_USERNAME`
+- one of:
+  - `WHC_STAGING_SSH_PRIVATE_KEY_PATH`
+  - `WHC_STAGING_SSH_PASSWORD`
 
 ## Optional Environment Variables
 
@@ -274,6 +285,14 @@ Current behavior by workflow mode:
    - staging SSH/WP-CLI/path/domain probes
    - `/wp-json/` HTTP readiness
 
+Important current boundary:
+
+1. `check:generic` is the main trustworthy gate for source compatibility and hidden-state bootstrap.
+2. `whc_setup_remote` is for wiring remote Git repository metadata on cPanel.
+3. `ssh_scp_wpcli` is the default workflow mode for `mytho/source`.
+4. `whc_deploy` is not yet the end-to-end executor for the `mytho/source` SCP/WP-CLI pipeline.
+5. `git_deploy` naming now means local Git push plus cPanel deployment-task flow. If you release this package today, treat that mode as contract/readiness-oriented until the real deploy handler is finished.
+
 What you need from the result:
 
 1. `ready_for_deploy=true` and `status=ready`: ready to run deploy pipeline.
@@ -301,17 +320,36 @@ This initializes the hidden project state under `.whc` and ensures the workspace
 3. The npm tarball is limited to the published files list and does not include local env files.
 4. For staging-to-live or database-changing operations, follow the tool safety prompts and confirm the release intent.
 
-## Publish Checklist
+## Release Prep
 
-1. `npm run test`
-2. `npm run pack:check`
-3. `npm run publish:npm`
+Run these from repository root before publishing:
 
-Notes:
-1. `npm run pack:check` automatically runs publish preparation and packs from `packages/devops-whc`.
-2. `npm run publish:npm` runs the real publish from `packages/devops-whc`.
-3. For prerelease versions like `1.0.2-next`, `npm run publish:npm` automatically publishes with dist-tag `next`.
-4. Do not run `npm publish` from the repository root package.
+```powershell
+npm run typecheck
+npm test
+npm run publish:prepare
+npm run pack:check
+```
+
+What each step does:
+
+1. `npm run typecheck`: validates TypeScript before release.
+2. `npm test`: runs the test suite.
+3. `npm run publish:prepare`: syncs root docs/scripts/build output into `packages/devops-whc`.
+4. `npm run pack:check`: dry-runs the actual npm package from `packages/devops-whc`.
+
+Publish only after the dry-run looks correct:
+
+```powershell
+npm run publish:npm
+```
+
+Release notes:
+
+1. `npm run publish:npm` publishes from `packages/devops-whc`, not from repository root.
+2. For prerelease versions like `1.0.2-next`, the publish script automatically uses dist-tag `next`.
+3. Do not run `npm publish` directly from the repository root package.
+4. Be explicit in release notes that `ssh_scp_wpcli` is the default mode and `git_deploy` is still being aligned to the real cPanel deployment execution path.
 
 ## License
 

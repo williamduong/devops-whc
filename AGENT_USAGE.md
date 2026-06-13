@@ -99,7 +99,14 @@ It only prepares the remote Git endpoint on cPanel (repository root + SSH hint) 
 
 Think of it as wiring transport, not shipping release.
 
-After `whc_setup_remote`, a manual or automated `git push` from local source is still required, then `whc_deploy` triggers deployment tasks.
+After `whc_setup_remote`, a manual or automated `git push` from local source is still required.
+
+Current boundary:
+
+1. `whc_setup_remote` is ready for remote Git repository setup.
+2. `check:generic` is the main trustworthy readiness gate for both workflow modes.
+3. `whc_deploy` contract for `git_deploy` is still being aligned to the real cPanel deployment-task execution path.
+4. `whc_deploy` does not yet execute the full `ssh_scp_wpcli` runtime pipeline; keep that in project-local scripts for now.
 
 ## 3. Required Context Before Any Write
 
@@ -107,13 +114,8 @@ Always collect these first:
 
 1. Active workflow mode.
 2. Target environment (`staging` or `live`).
-3. Direction (for git-driven environment operations):
-   - `live_to_staging`
-   - `staging_to_live`
-4. Sync scope:
-   - `files`
-   - `database`
-   - `everything`
+3. For `git_deploy`, identify the remote repository root and branch that should be deployed.
+4. For `ssh_scp_wpcli`, identify the local app root, staging SSH target, and runtime bootstrap path.
 5. Whether `dry_run` and `confirmed` are required by policy.
 
 ## 3.1 Manual vs Agent Responsibilities
@@ -126,17 +128,17 @@ User/operator must do manually (once per environment):
 Agent can automate repeatedly:
 1. Validate context and run dry-run checks.
 2. Create/list repository via `whc_setup_remote`.
-3. Push local source to the cPanel-managed Git repository.
-4. Trigger deployment via `whc_deploy`.
-5. Execute safe runtime probes and logs/health collection.
+3. Push local source to the cPanel-managed Git repository when credentials are available.
+4. Execute safe runtime probes and logs/health collection.
+5. Run source-compatibility checks and hidden-state bootstrap for a specific project root.
 
 Hybrid step:
 1. `git push` may be run by agent from local terminal when keys/permissions are ready; otherwise operator performs push manually.
 
 ## 4. Safety Rules
 
-1. Never promote live directly without staging verification.
-2. For `staging_to_live` with `database` or `everything`, provide backup reference unless emergency override is explicitly approved.
+1. Never claim a deploy was executed unless the handler actually changed remote state.
+2. Never promote live directly without staging verification.
 3. Prefer `dry_run=true` before state-changing requests.
 4. Always set `confirmed=true` when the policy requires explicit confirmation.
 
@@ -145,11 +147,11 @@ Hybrid step:
 1. `whc_prepare` to initialize hidden state and readiness checks.
 2. `whc_check_health` for target status and capability baseline.
 3. `whc_get_logs` for pre-deploy signal.
-4. `whc_deploy` with `dry_run=true`.
-5. `whc_deploy` real execution after dry-run passes.
+4. For `git_deploy`, run remote repository setup and local `git push`.
+5. For `ssh_scp_wpcli`, run the project-local doctor/SCP/WP-CLI pipeline.
 6. `whc_verify` to produce technical verify report.
 7. Run smoke checks outside or via allowed tool path.
-8. If staging passes, run promote flow for live with explicit direction and backup policy.
+8. If staging passes, decide whether live release should proceed.
 
 For `ssh_scp_wpcli` projects, replace steps 4-7 with the project-local source pipeline:
 1. doctor
@@ -184,74 +186,33 @@ Example rollback preview payload:
 }
 ```
 
-## 6. Canonical Payloads
+## 6. Canonical Usage Patterns
 
-### 6.1 Staging dry-run (git_deploy refresh contract)
+### 6.1 `git_deploy`
 
-```json
-{
-  "dry_run": true,
-  "confirmed": true,
-  "payload": {
-    "workflow_mode": "git_deploy",
-    "target_environment": "staging",
-    "release_intent": "refresh",
-    "pipeline_id": "P3D",
-    "source_profile": {
-      "source_kind": "full_site",
-      "deploy_unit": "raw_source"
-    },
-    "direction": "live_to_staging",
-    "sync_scope": "files",
-    "verify_after_deploy": true,
-    "auto_rollback_on_verify_failure": false
-  }
-}
-```
+Use this mode when the real delivery path is:
 
-### 6.2 Staging real refresh operation (git_deploy contract)
+1. local Git repository
+2. push to cPanel-managed repository
+3. cPanel deployment task runs `.cpanel.yml`
 
-```json
-{
-  "confirmed": true,
-  "payload": {
-    "workflow_mode": "git_deploy",
-    "target_environment": "staging",
-    "release_intent": "refresh",
-    "pipeline_id": "P3D",
-    "source_profile": {
-      "source_kind": "full_site",
-      "deploy_unit": "raw_source"
-    },
-    "direction": "live_to_staging",
-    "sync_scope": "files",
-    "verify_after_deploy": true,
-    "auto_rollback_on_verify_failure": false
-  }
-}
-```
+Agent expectations today:
 
-### 6.3 Live promote (higher risk)
+1. validate readiness with `check:generic`
+2. ensure remote repo exists with `whc_setup_remote`
+3. push with local Git
+4. do not overstate `whc_deploy` as complete end-to-end execution until that handler is finished
 
-```json
-{
-  "confirmed": true,
-  "payload": {
-    "workflow_mode": "git_deploy",
-    "target_environment": "live",
-    "release_intent": "promote",
-    "pipeline_id": "P3D",
-    "source_profile": {
-      "source_kind": "full_site",
-      "deploy_unit": "raw_source"
-    },
-    "direction": "staging_to_live",
-    "sync_scope": "files",
-    "verify_after_deploy": true,
-    "auto_rollback_on_verify_failure": true
-  }
-}
-```
+### 6.2 `ssh_scp_wpcli`
+
+Use this mode for `mytho/source` style delivery:
+
+1. doctor
+2. backup
+3. SCP code sync
+4. WP-CLI bootstrap
+5. seed/bootstrap
+6. smoke gate
 
 ## 7. Smoke Gate Expectations
 
@@ -268,19 +229,24 @@ If preconditions fail (plugin/page/routes absent), gate must be `HOLD`.
 
 ## 7.1 Pipeline Mindset Guard
 
-Treat these as two different operations:
+Treat these as two different foundations:
 
-1. Environment refresh contract:
-  - `workflow_mode=git_deploy`
-  - `direction=live_to_staging`
-  - `release_intent=refresh`
-2. Release deploy to staging:
-  - Use release candidate source (SSH/SCP deploy), not live mirror sync.\r\n  - Use `repository_root` under `/home/<WHC_USER>/...`; cross-account paths are blocked by policy.
+1. `git_deploy`
+   - repository-driven
+   - local `git push`
+   - cPanel deployment task
+   - `.cpanel.yml` at repo root
+2. `ssh_scp_wpcli`
+   - source-driven
+   - SCP file transfer
+   - remote WP-CLI runtime/bootstrap
+   - project-specific smoke gate
 
 Policy note:
 
-1. `git_deploy + live_to_staging + release_intent=deploy` is blocked by policy because it causes release-testing ambiguity.
-2. `ssh_scp_wpcli` is the correct mindset for `mytho/source` style release delivery, but `whc_deploy` currently only offers readiness/dry-run guidance for that mode. Real execution should stay in the project-local deploy script until the source-specific handler lands.
+1. `ssh_scp_wpcli` is the correct default mindset for `mytho/source`.
+2. `git_deploy` should not be described as staging/live native sync.
+3. If a release note or operator guide mentions `managed_clone_sync`, treat that as stale wording and replace it.
 
 ## 8. Troubleshooting
 
@@ -296,12 +262,13 @@ Checks:
 2. Confirm The tool server process has reloaded after env edits.
 3. Avoid malformed quoting in key path values.
 
-### 8.2 Deploy validation errors in managed mode
+### 8.2 Deploy contract confusion
 
-If request fails with missing direction, ensure payload includes:
+If users are mixing repository deploy with environment-sync wording:
 
-1. `direction`
-2. `sync_scope`
+1. for `git_deploy`, think `repository_root`, `branch`, `.cpanel.yml`, and cPanel deployment task
+2. for `ssh_scp_wpcli`, think WordPress app root, `scp`, `wp`, and smoke checks
+3. do not describe either mode as native WHC staging/live clone sync
 
 ## 9. One-Line Operator Playbook
 
