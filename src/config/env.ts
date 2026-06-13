@@ -133,9 +133,6 @@ export function loadConfig(env = process.env): AppConfig {
       "WHC_API_TOKEN",
       "WHC_USER",
       "WHC_HOST",
-      "WHC_PROD_SSH_HOST",
-      "WHC_PROD_SSH_USERNAME",
-      "WHC_PROD_SSH_PRIVATE_KEY_PATH",
     ] as const) {
       if (!(data[key] ?? "").trim()) {
         missingFields.push(key);
@@ -159,9 +156,9 @@ export function loadConfig(env = process.env): AppConfig {
     throw new Error(`VALIDATION_ERROR: Missing or invalid env vars: ${missingFields.join(", ")}`);
   }
 
-  const prodSshHost = data.WHC_PROD_SSH_HOST ?? data.WHC_STAGING_SSH_HOST ?? "";
+  const prodSshHost = data.WHC_PROD_SSH_HOST ?? data.WHC_HOST ?? data.WHC_STAGING_SSH_HOST ?? "";
   const prodSshPort = data.WHC_PROD_SSH_PORT;
-  const prodSshUsername = data.WHC_PROD_SSH_USERNAME ?? data.WHC_STAGING_SSH_USERNAME ?? "";
+  const prodSshUsername = data.WHC_PROD_SSH_USERNAME ?? data.WHC_USER ?? data.WHC_STAGING_SSH_USERNAME ?? "";
   const prodSshPrivateKeyPath = data.WHC_PROD_SSH_PRIVATE_KEY_PATH ?? data.WHC_STAGING_SSH_PRIVATE_KEY_PATH ?? "";
 
   const hasStagingSsh =

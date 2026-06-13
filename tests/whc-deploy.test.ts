@@ -11,7 +11,7 @@ const baseConfig = {
   apiBaseUrl: "https://host.example.com:2083",
   workflowMode: "git_deploy" as const,
   domains: { primary: "example.com" },
-  paths: { prod: "/home/prod/public_html" },
+  paths: { prod: "/home/bbcyvf27/public_html" },
   sourceProfile: {
     sourceKind: "full_site" as const,
     deployUnit: "raw_source" as const,
@@ -30,9 +30,17 @@ const baseConfig = {
 };
 
 const sourceProfile = { source_kind: "full_site" as const, deploy_unit: "raw_source" as const };
+const repositoryRoot = "/home/bbcyvf27/repositories/mytho";
 
-function mockUapiClient(): WhcUapiClient {
-  return {} as unknown as WhcUapiClient;
+function mockUapiClient(ok = true): WhcUapiClient {
+  return {
+    triggerDeployment: async (repository_root: string, branch?: string) => ({
+      ok,
+      latencyMs: 5,
+      deployment_id: ok ? "dep-123" : undefined,
+      message: ok ? `Triggered ${repository_root}${branch ? `#${branch}` : ""}` : "failed",
+    }),
+  } as unknown as WhcUapiClient;
 }
 
 describe("whc_deploy schema", () => {
@@ -41,9 +49,34 @@ describe("whc_deploy schema", () => {
       validateWhcDeployRequest({
         request_id: "r1",
         actor: { kind: "copilot" },
-        payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging" },
+        payload: {
+          workflow_mode: "git_deploy",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+          repository_root: repositoryRoot,
+        },
       }),
     ).toThrow(/VALIDATION_ERROR/);
+  });
+
+  it("requires repository_root for git_deploy", () => {
+    expect(() =>
+      validateWhcDeployRequest({
+        request_id: "r-missing-root",
+        actor: { kind: "copilot" },
+        confirmed: true,
+        idempotency_key: "idem-missing-root",
+        payload: {
+          workflow_mode: "git_deploy",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+        },
+      }),
+    ).toThrow(/repository_root/);
   });
 
   it("accepts valid git_deploy request", () => {
@@ -52,9 +85,18 @@ describe("whc_deploy schema", () => {
       actor: { kind: "copilot" },
       confirmed: true,
       idempotency_key: "idem-1",
-      payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
+      payload: {
+        workflow_mode: "git_deploy",
+        target_environment: "staging",
+        release_intent: "deploy",
+        pipeline_id: "P3D",
+        source_profile: sourceProfile,
+        repository_root: repositoryRoot,
+        branch: "main",
+      },
     });
     expect(req.payload.workflow_mode).toBe("git_deploy");
+    expect(req.payload.repository_root).toBe(repositoryRoot);
   });
 
   it("accepts ssh_scp_wpcli request shape", () => {
@@ -77,20 +119,8 @@ describe("whc_deploy schema", () => {
 });
 
 describe("resolveDeploySafetyLevel", () => {
-  it("returns C for files-only staging_to_live", () => {
-    expect(resolveDeploySafetyLevel("staging_to_live", "files")).toBe("C");
-  });
-
-  it("returns D for staging_to_live + database", () => {
-    expect(resolveDeploySafetyLevel("staging_to_live", "database")).toBe("D");
-  });
-
-  it("returns D for staging_to_live + everything", () => {
-    expect(resolveDeploySafetyLevel("staging_to_live", "everything")).toBe("D");
-  });
-
-  it("returns C for live_to_staging + everything", () => {
-    expect(resolveDeploySafetyLevel("live_to_staging", "everything")).toBe("C");
+  it("returns level C for git deployment flow", () => {
+    expect(resolveDeploySafetyLevel()).toBe("C");
   });
 });
 
@@ -104,17 +134,25 @@ describe("executeWhcDeploy", () => {
         dry_run: true,
         confirmed: true,
         idempotency_key: "idem-1",
-        payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
+        payload: {
+          workflow_mode: "git_deploy",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+          repository_root: repositoryRoot,
+          branch: "main",
+        },
       },
       { uapiClient: mockUapiClient() },
     );
     expect(result.ok).toBe(true);
     expect(result.data?.outcome).toBe("dry_run_preview");
-    expect(result.data?.pipeline_status).toBe("pass_partial");
+    expect(result.data?.repository_root).toBe(repositoryRoot);
     expect(result.data?.phase_coverage.deployment_state).toBe("excluded");
   });
 
-  it("blocks live target unless flow is managed promote staging_to_live", async () => {
+  it("blocks live git deploy unless release_intent is promote when staging-first is enabled", async () => {
     const configEnforced = {
       ...baseConfig,
       safety: {
@@ -126,18 +164,18 @@ describe("executeWhcDeploy", () => {
     const result = await executeWhcDeploy(
       configEnforced,
       {
-        request_id: "r-live-managed-block",
+        request_id: "r-live-block",
         actor: { kind: "copilot" },
         confirmed: true,
-        idempotency_key: "idem-live-managed-block",
+        idempotency_key: "idem-live-block",
         payload: {
           workflow_mode: "git_deploy",
           target_environment: "live",
           release_intent: "deploy",
           pipeline_id: "P3D",
           source_profile: sourceProfile,
-          direction: "staging_to_live",
-          sync_scope: "files",
+          repository_root: repositoryRoot,
+          branch: "main",
         },
       },
       { uapiClient: mockUapiClient() },
@@ -147,7 +185,7 @@ describe("executeWhcDeploy", () => {
     expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
   });
 
-  it("allows live target for managed promote flow from staging", async () => {
+  it("triggers deployment for allowed live promote flow", async () => {
     const configEnforced = {
       ...baseConfig,
       safety: {
@@ -159,60 +197,108 @@ describe("executeWhcDeploy", () => {
     const result = await executeWhcDeploy(
       configEnforced,
       {
-        request_id: "r-live-promote-allow",
+        request_id: "r-live-promote",
         actor: { kind: "copilot" },
         confirmed: true,
-        idempotency_key: "idem-live-promote-allow",
+        idempotency_key: "idem-live-promote",
         payload: {
           workflow_mode: "git_deploy",
           target_environment: "live",
           release_intent: "promote",
           pipeline_id: "P3D",
           source_profile: sourceProfile,
-          direction: "staging_to_live",
-          sync_scope: "files",
+          repository_root: repositoryRoot,
+          branch: "release/live",
         },
       },
       { uapiClient: mockUapiClient() },
     );
 
     expect(result.ok).toBe(true);
-    expect(result.data?.outcome).toBe("synced_staging_to_live");
+    expect(result.data?.outcome).toBe("deployment_triggered");
+    expect(result.data?.deployment_id).toBe("dep-123");
   });
 
-  it("returns synced_live_to_staging for git_deploy refresh", async () => {
+  it("calls real triggerDeployment instead of returning synthetic success", async () => {
+    let calledWith: { repository_root?: string; branch?: string } = {};
     const result = await executeWhcDeploy(
       baseConfig,
       {
-        request_id: "r1",
+        request_id: "r-trigger",
         actor: { kind: "copilot" },
         confirmed: true,
-        idempotency_key: "idem-1",
-        payload: { workflow_mode: "git_deploy", target_environment: "staging", release_intent: "refresh", pipeline_id: "P2R", source_profile: sourceProfile, direction: "live_to_staging", sync_scope: "files" },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-    expect(result.ok).toBe(true);
-    expect(result.data?.outcome).toBe("synced_live_to_staging");
-    expect(result.data?.pipeline_status).toBe("pass_partial");
-    expect(result.data?.phase_coverage.code_state).toBe("included");
-    expect(result.data?.phase_coverage.runtime_state).toBe("excluded");
-  });
-
-  it("blocks managed live_to_staging when release_intent is deploy", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r-mindset-block",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-mindset-block",
+        idempotency_key: "idem-trigger",
         payload: {
           workflow_mode: "git_deploy",
           target_environment: "staging",
           release_intent: "deploy",
           pipeline_id: "P3D",
           source_profile: sourceProfile,
+          repository_root: repositoryRoot,
+          branch: "main",
+        },
+      },
+      {
+        uapiClient: {
+          triggerDeployment: async (root: string, branch?: string) => {
+            calledWith = { repository_root: root, branch };
+            return {
+              ok: true,
+              latencyMs: 5,
+              deployment_id: "dep-real",
+              message: "ok",
+            };
+          },
+        } as unknown as WhcUapiClient,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calledWith).toEqual({ repository_root: repositoryRoot, branch: "main" });
+    expect(result.data?.deployment_id).toBe("dep-real");
+  });
+
+  it("returns upstream error when git deployment trigger fails", async () => {
+    const result = await executeWhcDeploy(
+      baseConfig,
+      {
+        request_id: "r-trigger-fail",
+        actor: { kind: "copilot" },
+        confirmed: true,
+        idempotency_key: "idem-trigger-fail",
+        payload: {
+          workflow_mode: "git_deploy",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+          repository_root: repositoryRoot,
+        },
+      },
+      { uapiClient: mockUapiClient(false) },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("TEMPORARY_UPSTREAM_ERROR");
+    expect(result.error?.message).toMatch(/Git deployment trigger failed/);
+  });
+
+  it("warns that legacy direction/sync_scope fields are ignored in git_deploy", async () => {
+    const result = await executeWhcDeploy(
+      baseConfig,
+      {
+        request_id: "r-legacy-fields",
+        actor: { kind: "copilot" },
+        dry_run: true,
+        confirmed: true,
+        idempotency_key: "idem-legacy-fields",
+        payload: {
+          workflow_mode: "git_deploy",
+          target_environment: "staging",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
+          source_profile: sourceProfile,
+          repository_root: repositoryRoot,
           direction: "live_to_staging",
           sync_scope: "files",
         },
@@ -220,77 +306,8 @@ describe("executeWhcDeploy", () => {
       { uapiClient: mockUapiClient() },
     );
 
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    expect(result.error?.message).toMatch(/Invalid deploy mindset/);
-  });
-
-  it("includes data loss warning for database sync scope", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r1",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-1",
-        payload: { workflow_mode: "git_deploy", target_environment: "live", release_intent: "promote", pipeline_id: "P3D", source_profile: sourceProfile, direction: "staging_to_live", sync_scope: "database", backup_reference: "backup-1" },
-      },
-      { uapiClient: mockUapiClient() },
-    );
     expect(result.ok).toBe(true);
-    expect(result.data?.warnings.some((w) => w.includes("DATABASE"))).toBe(true);
-    expect(result.meta.safety_level).toBe("D");
-  });
-
-  it("blocks high-risk staging_to_live sync without backup reference", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r-gate",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-gate",
-        payload: {
-          workflow_mode: "git_deploy",
-          target_environment: "live",
-          release_intent: "promote",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          direction: "staging_to_live",
-          sync_scope: "everything",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-  });
-
-  it("allows high-risk sync with backup reference", async () => {
-    const result = await executeWhcDeploy(
-      baseConfig,
-      {
-        request_id: "r-gate-ok",
-        actor: { kind: "copilot" },
-        confirmed: true,
-        idempotency_key: "idem-gate-ok",
-        payload: {
-          workflow_mode: "git_deploy",
-          target_environment: "live",
-          release_intent: "promote",
-          pipeline_id: "P3D",
-          source_profile: sourceProfile,
-          direction: "staging_to_live",
-          sync_scope: "database",
-          backup_reference: "backup-2026-06-08-001",
-        },
-      },
-      { uapiClient: mockUapiClient() },
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.data?.backup_reference).toBe("backup-2026-06-08-001");
+    expect(result.data?.warnings.some((warning) => warning.includes("legacy managed-sync fields"))).toBe(true);
   });
 
   it("blocks concurrent deployment when lock key already held", async () => {
@@ -308,11 +325,10 @@ describe("executeWhcDeploy", () => {
         payload: {
           workflow_mode: "git_deploy",
           target_environment: "staging",
-          release_intent: "refresh",
-          pipeline_id: "P2R",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
           source_profile: sourceProfile,
-          direction: "live_to_staging",
-          sync_scope: "files",
+          repository_root: repositoryRoot,
           lock_key: "deploy-lock-key",
         },
       },
@@ -335,11 +351,10 @@ describe("executeWhcDeploy", () => {
         payload: {
           workflow_mode: "git_deploy",
           target_environment: "staging",
-          release_intent: "refresh",
-          pipeline_id: "P2R",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
           source_profile: sourceProfile,
-          direction: "live_to_staging",
-          sync_scope: "files",
+          repository_root: repositoryRoot,
           verify_after_deploy: true,
         },
       },
@@ -366,11 +381,10 @@ describe("executeWhcDeploy", () => {
         payload: {
           workflow_mode: "git_deploy",
           target_environment: "staging",
-          release_intent: "refresh",
-          pipeline_id: "P2R",
+          release_intent: "deploy",
+          pipeline_id: "P3D",
           source_profile: sourceProfile,
-          direction: "live_to_staging",
-          sync_scope: "files",
+          repository_root: repositoryRoot,
           verify_after_deploy: true,
           auto_rollback_on_verify_failure: true,
         },

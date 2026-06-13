@@ -11,7 +11,10 @@ const payloadSchema = z.object({
   pipeline_id: z.enum(["P0", "P1", "P2", "P2R", "P3", "P3D", "P4", "P5"]),
   source_profile: sourceProfileSchema,
 
-  // sync fields
+  repository_root: z.string().min(1).optional(),
+  branch: z.string().min(1).optional(),
+
+  // Legacy sync fields kept for compatibility with older callers.
   direction: z.enum(["live_to_staging", "staging_to_live"]).optional(),
   sync_scope: z.enum(["files", "database", "everything"]).optional(),
 
@@ -20,6 +23,14 @@ const payloadSchema = z.object({
   verify_after_deploy: z.boolean().optional(),
   auto_rollback_on_verify_failure: z.boolean().optional(),
   lock_key: z.string().min(1).optional(),
+}).superRefine((payload, ctx) => {
+  if (payload.workflow_mode === "git_deploy" && !payload.repository_root) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["repository_root"],
+      message: "repository_root is required for workflow_mode=git_deploy",
+    });
+  }
 });
 
 const requestSchema = z.object({
@@ -55,8 +66,7 @@ export function buildDefaultWhcDeployPayload(config: AppConfig): WhcDeployPayloa
     release_intent: releaseIntent,
     pipeline_id: pipelineId,
     source_profile: sourceProfile,
-    direction: "staging_to_live",
-    sync_scope: "files",
+    repository_root: config.paths.prod,
   };
 }
 

@@ -7,17 +7,17 @@ import { DeploymentLockService, InMemoryDeploymentLockService } from "../service
 import { WhcSshClient } from "../clients/ssh-client";
 import { runDeployRollback, runDeployVerification } from "../services/deploy-runtime-ops";
 
-export type DeployOutcome =
-  | "synced_live_to_staging"
-  | "synced_staging_to_live"
-  | "dry_run_preview";
+export type DeployOutcome = "deployment_triggered" | "dry_run_preview";
 
 export interface WhcDeployData {
   outcome: DeployOutcome;
   workflow_mode: "git_deploy" | "ssh_scp_wpcli";
   target_environment: string;
+  repository_root?: string;
+  branch?: string;
   direction?: string;
   sync_scope?: string;
+  deployment_id?: string;
   verify_status?: "skipped" | "passed" | "failed";
   rollback_status?: "not_needed" | "attempted" | "succeeded" | "failed";
   lock_key?: string;
@@ -52,18 +52,7 @@ export interface WhcDeployHandlerDeps {
   actionIdFactory?: () => string;
 }
 
-/**
- * Resolves the effective safety level for this deploy operation.
- * staging_to_live + database or everything → Level D.
- * All other writes remain at Level C.
- */
-export function resolveDeploySafetyLevel(
-  direction?: string,
-  syncScope?: string,
-): "C" | "D" {
-  if (direction === "staging_to_live" && (syncScope === "database" || syncScope === "everything")) {
-    return "D";
-  }
+export function resolveDeploySafetyLevel(): "C" | "D" {
   return "C";
 }
 
@@ -86,52 +75,33 @@ export async function executeWhcDeploy(
     release_intent,
     pipeline_id,
     source_profile,
+    repository_root,
+    branch,
     direction,
     sync_scope,
     backup_reference,
-    allow_emergency_without_backup,
     verify_after_deploy,
     auto_rollback_on_verify_failure,
     lock_key,
   } = request.payload;
 
-  const effectiveSafetyLevel = resolveDeploySafetyLevel(direction, sync_scope);
-  const needsBackupGate = direction === "staging_to_live" && (sync_scope === "database" || sync_scope === "everything");
+  const effectiveSafetyLevel = resolveDeploySafetyLevel();
   const shouldVerify = verify_after_deploy ?? false;
-  const deployLockKey = lock_key ?? `whc_deploy:${target_environment}:${workflow_mode}`;
+  const deployLockKey = lock_key ?? `whc_deploy:${target_environment}:${workflow_mode}:${repository_root ?? "unset"}`;
   const lockOwner = request.request_id;
-
   const warnings: string[] = [];
 
-  if ((config.safety.enforceStagingFirst ?? true) && target_environment === "live") {
-    const isGitPromoteFlow =
-      workflow_mode === "git_deploy" &&
-      direction === "staging_to_live" &&
-      release_intent === "promote";
-
-    if (!isGitPromoteFlow) {
-      return buildErrorResponse(
-        actionIdFactory(),
-        startedAt,
-        effectiveSafetyLevel,
-        "BUSINESS_POLICY_BLOCKED",
-        [
-          "Staging-first policy: direct live deploy is blocked.",
-          "Only promote flow from staging to live is allowed.",
-          "Required payload shape for live target:",
-          JSON.stringify(
-            {
-              workflow_mode: "git_deploy",
-              target_environment: "live",
-              release_intent: "promote",
-              direction: "staging_to_live",
-            },
-            null,
-            2,
-          ),
-        ].join("\n"),
-      );
-    }
+  if ((config.safety.enforceStagingFirst ?? true) && workflow_mode === "git_deploy" && target_environment === "live" && release_intent !== "promote") {
+    return buildErrorResponse(
+      actionIdFactory(),
+      startedAt,
+      effectiveSafetyLevel,
+      "BUSINESS_POLICY_BLOCKED",
+      [
+        "Staging-first policy: direct live git deployment is blocked.",
+        "Only release_intent='promote' is allowed when target_environment='live'.",
+      ].join("\n"),
+    );
   }
 
   if (workflow_mode === "ssh_scp_wpcli") {
@@ -150,7 +120,6 @@ export async function executeWhcDeploy(
     if (request.dry_run) {
       const phaseCoverage = buildPhaseCoverage({
         workflowMode: workflow_mode,
-        syncScope: sync_scope,
         verifyStatus: "skipped",
         dryRun: true,
       });
@@ -192,42 +161,25 @@ export async function executeWhcDeploy(
     );
   }
 
-  if (config.safety.warnDynamicDataSync && sync_scope === "database") {
-    warnings.push("DATABASE sync detected — existing data on target will be overwritten. Ensure a backup exists before proceeding.");
+  if (direction || sync_scope) {
+    warnings.push("direction/sync_scope are legacy managed-sync fields and are ignored by git_deploy.");
   }
-  if (config.safety.warnDynamicDataSync && sync_scope === "everything") {
-    warnings.push("FULL sync (files + database) detected — all data on target will be replaced. This is irreversible without a backup.");
-  }
-  if (workflow_mode === "git_deploy" && release_intent === "deploy" && direction === "live_to_staging") {
+  if (!repository_root) {
     return buildErrorResponse(
       actionIdFactory(),
       startedAt,
       effectiveSafetyLevel,
-      "BUSINESS_POLICY_BLOCKED",
-      "Invalid deploy mindset: git_deploy + live_to_staging is an environment refresh, not a release deploy. Use release_intent='refresh' for live_to_staging.",
+      "VALIDATION_ERROR",
+      "git_deploy requires payload.repository_root so WHC knows which cPanel-managed repository to deploy.",
     );
   }
-  if (direction === "live_to_staging" && sync_scope !== "files") {
-    warnings.push("Refreshing staging from live with database/everything scope — any staging-only changes will be lost.");
-  }
-  if (needsBackupGate && !backup_reference && !allow_emergency_without_backup) {
-    return buildErrorResponse(
-      actionIdFactory(),
-      startedAt,
-      effectiveSafetyLevel,
-      "BUSINESS_POLICY_BLOCKED",
-      "Backup reference is required for staging_to_live database/everything sync. Provide payload.backup_reference or set allow_emergency_without_backup=true.",
-    );
-  }
-  if (needsBackupGate && !backup_reference && allow_emergency_without_backup) {
-    warnings.push("Emergency override enabled without backup_reference. Data loss recovery is not guaranteed.");
+  if (!branch) {
+    warnings.push("No branch was supplied; cPanel will deploy the repository's current configured HEAD.");
   }
 
-  // Dry run: return preview without making changes
   if (request.dry_run) {
     const phaseCoverage = buildPhaseCoverage({
       workflowMode: workflow_mode,
-      syncScope: sync_scope,
       verifyStatus: "skipped",
       dryRun: true,
     });
@@ -239,6 +191,8 @@ export async function executeWhcDeploy(
         outcome: "dry_run_preview",
         workflow_mode,
         target_environment,
+        repository_root,
+        branch,
         direction,
         sync_scope,
         lock_key: deployLockKey,
@@ -272,73 +226,79 @@ export async function executeWhcDeploy(
   }
 
   try {
-    // git_deploy mode: use cPanel-managed git deployment flow
-    if (!direction) {
-      return buildErrorResponse(actionIdFactory(), startedAt, effectiveSafetyLevel, "VALIDATION_ERROR", "git_deploy mode requires 'direction' field.");
+    const deployResult = await uapiClient.triggerDeployment(repository_root, branch);
+    if (!deployResult.ok) {
+      return buildErrorResponse(
+        actionIdFactory(),
+        startedAt,
+        effectiveSafetyLevel,
+        "TEMPORARY_UPSTREAM_ERROR",
+        `Git deployment trigger failed: ${deployResult.message}`,
+      );
     }
 
-      // Git deploy is represented with guarded intent + recovery contract.
-      const outcome: DeployOutcome = direction === "live_to_staging" ? "synced_live_to_staging" : "synced_staging_to_live";
-      let verifyStatus: "skipped" | "passed" | "failed" = "skipped";
-      let rollbackStatus: "not_needed" | "attempted" | "succeeded" | "failed" = "not_needed";
+    let verifyStatus: "skipped" | "passed" | "failed" = "skipped";
+    let rollbackStatus: "not_needed" | "attempted" | "succeeded" | "failed" = "not_needed";
 
-      if (shouldVerify) {
-        const verifyResult = await verifyRunner(config, request);
-        if (!verifyResult.ok) {
-          verifyStatus = "failed";
-          if (auto_rollback_on_verify_failure) {
-            rollbackStatus = "attempted";
-            const rollbackResult = await rollbackRunner(config, request);
-            rollbackStatus = rollbackResult.ok ? "succeeded" : "failed";
-          }
-
-          return buildErrorResponse(
-            actionIdFactory(),
-            startedAt,
-            effectiveSafetyLevel,
-            "TEMPORARY_UPSTREAM_ERROR",
-            `Post-deploy verification failed: ${verifyResult.message}`,
-          );
+    if (shouldVerify) {
+      const verifyResult = await verifyRunner(config, request);
+      if (!verifyResult.ok) {
+        verifyStatus = "failed";
+        if (auto_rollback_on_verify_failure) {
+          rollbackStatus = "attempted";
+          const rollbackResult = await rollbackRunner(config, request);
+          rollbackStatus = rollbackResult.ok ? "succeeded" : "failed";
         }
-        verifyStatus = "passed";
+
+        return buildErrorResponse(
+          actionIdFactory(),
+          startedAt,
+          effectiveSafetyLevel,
+          "TEMPORARY_UPSTREAM_ERROR",
+          `Post-deploy verification failed: ${verifyResult.message}`,
+        );
       }
+      verifyStatus = "passed";
+    }
 
-      const phaseCoverage = buildPhaseCoverage({
-        workflowMode: workflow_mode,
-        syncScope: sync_scope,
-        verifyStatus,
-        dryRun: false,
-      });
+    const phaseCoverage = buildPhaseCoverage({
+      workflowMode: workflow_mode,
+      verifyStatus,
+      dryRun: false,
+    });
 
-      return {
-        ok: true,
-        action_id: actionIdFactory(),
-        tool: "whc_deploy",
-        data: {
-          outcome,
-          workflow_mode,
-          target_environment,
-          direction,
-          sync_scope,
-          verify_status: verifyStatus,
-          rollback_status: rollbackStatus,
-          lock_key: deployLockKey,
-          backup_reference,
-          pipeline_status: derivePipelineStatus(phaseCoverage),
-          phase_coverage: phaseCoverage,
-          warnings,
-        },
-        error: null,
-        meta: {
-          latency_ms: Date.now() - startedAt,
-          safety_level: effectiveSafetyLevel,
-          workflow_mode,
-          pipeline_id,
-          release_intent,
-          source_profile,
+    return {
+      ok: true,
+      action_id: actionIdFactory(),
+      tool: "whc_deploy",
+      data: {
+        outcome: "deployment_triggered",
+        workflow_mode,
+        target_environment,
+        repository_root,
+        branch,
+        direction,
+        sync_scope,
+        deployment_id: deployResult.deployment_id,
+        verify_status: verifyStatus,
+        rollback_status: rollbackStatus,
+        lock_key: deployLockKey,
+        backup_reference,
+        pipeline_status: derivePipelineStatus(phaseCoverage),
+        phase_coverage: phaseCoverage,
+        warnings,
+      },
+      error: null,
+      meta: {
+        latency_ms: Date.now() - startedAt,
+        safety_level: effectiveSafetyLevel,
+        workflow_mode,
+        pipeline_id,
+        release_intent,
+        source_profile,
         delivery_mechanism: "git_deploy",
-        },
-      };
+      },
+    };
   } finally {
     lockService.release(deployLockKey, lockOwner);
   }
@@ -363,26 +323,18 @@ function buildErrorResponse(
 
 function buildPhaseCoverage(input: {
   workflowMode: "git_deploy" | "ssh_scp_wpcli";
-  syncScope?: string;
   verifyStatus: "skipped" | "passed" | "failed";
   dryRun: boolean;
 }): WhcDeployData["phase_coverage"] {
   const notes: string[] = [];
 
-  let codeState: "included" | "excluded" = "excluded";
-  let dataState: "included" | "excluded" = "excluded";
+  const codeState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
   const deploymentState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
 
-  if (input.syncScope === "files" || input.syncScope === "everything") {
-    codeState = input.dryRun ? "excluded" : "included";
-  }
-  if (input.syncScope === "database" || input.syncScope === "everything") {
-    dataState = input.dryRun ? "excluded" : "included";
-  }
   if (input.workflowMode === "git_deploy") {
     notes.push(
-      "git_deploy covers repository-driven deployment mechanics, not app runtime bootstrap (plugin/theme activation, rewrite, Woo setup).",
-      "Git deployment verification is transport-level unless additional runtime checks are run externally.",
+      "git_deploy triggers a cPanel deployment task for repository-managed code delivery.",
+      "git_deploy does not bootstrap WordPress runtime/data; use separate runtime checks or project-specific scripts for that layer.",
     );
   } else {
     notes.push(
@@ -391,6 +343,12 @@ function buildPhaseCoverage(input: {
     );
   }
 
+  if (input.verifyStatus === "passed") {
+    notes.push("Post-deploy verification passed.");
+  }
+  if (input.verifyStatus === "failed") {
+    notes.push("Post-deploy verification failed.");
+  }
   if (input.dryRun) {
     notes.push("dry_run preview only; no target state has been changed.");
   }
@@ -398,7 +356,7 @@ function buildPhaseCoverage(input: {
   return {
     code_state: codeState,
     runtime_state: "excluded",
-    data_state: dataState,
+    data_state: "excluded",
     deployment_state: deploymentState,
     notes,
   };

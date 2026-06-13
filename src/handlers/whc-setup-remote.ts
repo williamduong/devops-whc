@@ -237,7 +237,8 @@ export async function executeWhcSetupRemote(
 }
 
 function buildSshRemoteHint(config: AppConfig, deployTargetPath: string): string {
-  const { username, host } = config.sshTargets.prod;
+  const host = config.sshTargets.prod.host || config.host;
+  const username = config.sshTargets.prod.username || config.user;
   return `${username}@${host}:${deployTargetPath}`;
 }
 
