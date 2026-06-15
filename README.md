@@ -55,8 +55,10 @@ Mindset:
 
 1. source-driven deploy
 2. SCP file transfer
-3. remote WP-CLI bootstrap
-4. smoke gate
+3. remote WP-CLI bootstrap (plugin/theme activation)
+4. DB migration (wp search-replace + cache flush + rewrite flush + transient cleanup)
+5. seed/bootstrap (wp eval-file)
+6. smoke gate (HTTP /wp-json/)
 
 ### `git_deploy`
 
