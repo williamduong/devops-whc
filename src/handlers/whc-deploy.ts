@@ -135,7 +135,7 @@ export async function executeWhcDeploy(
           sync_scope,
           lock_key: deployLockKey,
           backup_reference,
-          pipeline_status: derivePipelineStatus(phaseCoverage),
+          pipeline_status: derivePipelineStatus(phaseCoverage, workflow_mode),
           phase_coverage: phaseCoverage,
           warnings: [...warnings, sourceScriptHint],
         },
@@ -197,7 +197,7 @@ export async function executeWhcDeploy(
         sync_scope,
         lock_key: deployLockKey,
         backup_reference,
-        pipeline_status: derivePipelineStatus(phaseCoverage),
+        pipeline_status: derivePipelineStatus(phaseCoverage, workflow_mode),
         phase_coverage: phaseCoverage,
         warnings,
       },
@@ -284,7 +284,7 @@ export async function executeWhcDeploy(
         rollback_status: rollbackStatus,
         lock_key: deployLockKey,
         backup_reference,
-        pipeline_status: derivePipelineStatus(phaseCoverage),
+        pipeline_status: derivePipelineStatus(phaseCoverage, workflow_mode),
         phase_coverage: phaseCoverage,
         warnings,
       },
@@ -362,14 +362,23 @@ function buildPhaseCoverage(input: {
   };
 }
 
-function derivePipelineStatus(phaseCoverage: WhcDeployData["phase_coverage"]): WhcDeployData["pipeline_status"] {
-  if (
+function derivePipelineStatus(
+  phaseCoverage: WhcDeployData["phase_coverage"],
+  workflowMode: "git_deploy" | "ssh_scp_wpcli",
+): WhcDeployData["pipeline_status"] {
+  // git_deploy only covers code_state + deployment_state (runtime/data are intentionally excluded).
+  // ssh_scp_wpcli is expected to cover all four phases.
+  if (workflowMode === "git_deploy") {
+    const gitOk =
+      phaseCoverage.code_state === "included" &&
+      phaseCoverage.deployment_state === "included";
+    return gitOk ? "full_pass" : "pass_partial";
+  }
+
+  const fullOk =
     phaseCoverage.code_state === "included" &&
     phaseCoverage.runtime_state === "included" &&
     phaseCoverage.data_state === "included" &&
-    phaseCoverage.deployment_state === "included"
-  ) {
-    return "full_pass";
-  }
-  return "pass_partial";
+    phaseCoverage.deployment_state === "included";
+  return fullOk ? "full_pass" : "pass_partial";
 }
