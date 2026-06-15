@@ -346,10 +346,13 @@ export async function runDbMigration(
   // ── Step 9: SQL-based transient cleanup (official WP recommendation) ──
   // Ref: https://developer.wordpress.org/advanced-administration/upgrade/migrating/
   // "Transients are temporary cached values... safe to delete them from the migrated database"
-  // SQL: DELETE FROM wp_options WHERE option_name LIKE '%_transient_%'
+  // Uses two-step approach: get table prefix, then run DELETE
+  const prefixCmd = wpCmd(remotePath, `config get table_prefix 2>&1`);
+  const prefixResult = await sshClient.execWithKey(target, prefixCmd);
+  const tablePrefix = prefixResult.ok ? prefixResult.stdout.trim() : "wp_";
   const transientSqlCmd = wpCmd(
     remotePath,
-    `db query "DELETE FROM $(wp --path='${remotePath.replace(/'/g, `'"'"'`)}' config get table_prefix)options WHERE option_name LIKE '%\\\\_transient\\\\_%'" 2>&1`,
+    `db query "DELETE FROM ${tablePrefix}options WHERE option_name LIKE '%\\\\_transient\\\\_%'" 2>&1`,
   );
   const transientSqlResult = await sshClient.execWithKey(target, transientSqlCmd);
   const transientSqlCleanup: WpCliStepResult = {
@@ -579,6 +582,16 @@ export async function runSshScpWpCliPipeline(
   let scpSync: ScpSyncResult;
   if (input.localSourceDir) {
     scpSync = await runScpCodeSync(config, sshClient, input.localSourceDir, input.remoteSubDir);
+    if (!scpSync.ok) {
+      warnings.push("SCP code sync failed — skipping remaining phases.");
+      return {
+        ok: false,
+        scpSync,
+        wpCliBootstrap: [],
+        envConfig: { ok: false, steps: [{ ok: false, step: "skipped", message: "Skipped: SCP sync failed." }] },
+        warnings,
+      };
+    }
   } else {
     scpSync = { ok: true, uploaded: 0, failed: 0, message: "No local source dir provided; skipping SCP sync." };
     warnings.push("SCP code sync skipped: no local source directory provided.");

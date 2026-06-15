@@ -258,12 +258,29 @@ export class WhcSshClient {
     const files = skipPatterns && skipPatterns.length > 0
       ? allFiles.filter((f) => {
           const rel = relative(localDir, f).split(sep).join("/");
+          const name = f.split(/[/\\]/).pop()!;
           return !skipPatterns.some((pattern) => {
-            if (pattern.includes("*")) {
-              const regex = new RegExp("^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
-              return regex.test(rel) || regex.test(f.split(/[/\\]/).pop()!);
+            // Exact filename match
+            if (name === pattern) return true;
+            // Exact relative path match
+            if (rel === pattern) return true;
+            // Glob match (supports * and ?)
+            if (pattern.includes("*") || pattern.includes("?")) {
+              const regexStr = "^" + pattern
+                .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+                .replace(/\*/g, ".*")
+                .replace(/\?/g, ".") + "$";
+              const regex = new RegExp(regexStr);
+              if (regex.test(rel) || regex.test(name)) return true;
             }
-            return rel === pattern || f.split(/[/\\]/).pop() === pattern;
+            // Path prefix match — pattern is a directory, match all files inside
+            if (pattern.endsWith("/*")) {
+              const dirPrefix = pattern.slice(0, -2);
+              if (rel.startsWith(dirPrefix + "/")) return true;
+            }
+            // Simple directory prefix match (no trailing /*)
+            if (rel.startsWith(pattern + "/")) return true;
+            return false;
           });
         })
       : allFiles;
@@ -348,8 +365,11 @@ export class WhcSshClient {
 
   private collectLocalFiles(localDir: string): string[] {
     const result: string[] = [];
+    // Directories to always skip (never descend into)
+    const skipDirs = new Set([".git", ".whc", "node_modules"]);
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (skipDirs.has(entry.name)) continue;
         const fullPath = join(dir, entry.name);
         if (entry.isDirectory()) {
           walk(fullPath);
@@ -402,9 +422,21 @@ export class WhcSshClient {
   }
 
   private mkdirRemote(sftp: SFTPWrapper, remotePath: string): Promise<void> {
-    return new Promise((resolve, _reject) => {
-      // Try to mkdir, ignore errors (directory may already exist)
-      sftp.mkdir(remotePath, { mode: 0o755 }, () => resolve());
+    return new Promise((resolve) => {
+      const parts = remotePath.replace(/\\/g, "/").split("/").filter(Boolean);
+      let current = remotePath.startsWith("/") ? "/" : "";
+
+      const createNext = (index: number) => {
+        if (index >= parts.length) return resolve();
+        current = current ? `${current}/${parts[index]}` : parts[index];
+        index++;
+        sftp.mkdir(current, { mode: 0o755 }, (err) => {
+          // Ignore EEXIST (already exists) and continue
+          createNext(index);
+        });
+      };
+
+      createNext(0);
     });
   }
 
