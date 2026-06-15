@@ -49,16 +49,18 @@ npm test
 
 ### `ssh_scp_wpcli`
 
-Default mode for `mytho/source` style delivery.
+Default mode for `mytho/source` style delivery. Full 6-phase pipeline:
 
-Mindset:
-
-1. source-driven deploy
-2. SCP file transfer
-3. remote WP-CLI bootstrap (plugin/theme activation)
-4. DB migration (wp search-replace + cache flush + rewrite flush + transient cleanup)
-5. seed/bootstrap (wp eval-file)
-6. smoke gate (HTTP /wp-json/)
+| Phase | What it does |
+|---|---|
+| 1. Doctor | SSH, WP-CLI, remote path, HTTP probe |
+| 2. Backup | `wp db export` with audit trail |
+| 3. SCP Sync | SFTP upload (skips `wp-config.php`, `.env`, `.htaccess`, `uploads/*`, `cache/*`) |
+| 4a. Bootstrap | Activate plugins/themes via WP-CLI |
+| 4b. DB Migration | 9-step WordPress standard: home/siteurl → search-replace (dry-run first) → cache → rewrite → transients |
+| 4c. Env Config | `wp config set WP_DEBUG` etc. per environment |
+| 5. Seed | `wp eval-file` (optional) |
+| 6. Smoke | HTTP GET `/wp-json/` |
 
 ### `git_deploy`
 

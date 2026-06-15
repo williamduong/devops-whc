@@ -25,19 +25,25 @@ Use `devops-whc` when you need a local CLI / stdio server for WHC cPanel workflo
 2. health and connectivity checks
 3. repository-driven cPanel Git deployment
 4. source-driven WordPress delivery with SSH/SCP/WP-CLI
+5. database migration with WordPress-standard search-replace, cache flush, and transient cleanup
+6. WooCommerce-ready staging deployment with safe environment config
 
 ## Two Workflow Modes
 
 ### `ssh_scp_wpcli`
 
-Default mode. Use this for `mytho/source` style delivery:
+Default mode. Full pipeline for `mytho/source` style delivery:
 
-1. doctor
-2. backup
-3. SCP code sync
-4. WP-CLI bootstrap
-5. seed/bootstrap
-6. smoke gate
+| Phase | Action | Details |
+|---|---|---|
+| 1. Doctor | Pre-flight checks | SSH, WP-CLI, remote path, HTTP probe |
+| 2. Backup | DB export | `wp db export` → `.sql.gz` with audit trail |
+| 3. SCP Sync | Code delivery | SFTP upload (auto-skips `wp-config.php`, `.env`, `.htaccess`, `uploads/*`, `cache/*`) |
+| 4a. Bootstrap | Activate plugins/themes | `wp plugin activate` / `wp theme activate` |
+| 4b. DB Migration | 9-step WordPress standard | `wp option update home/siteurl` → `wp search-replace --dry-run` → actual replace → `wp cache flush` → `wp rewrite structure` → `wp rewrite flush` → `wp transient delete --all` → SQL transient cleanup |
+| 4c. Env Config | Staging safety | `wp config set WP_DEBUG false`, `WP_DEBUG_LOG true`, etc. |
+| 5. Seed | Data bootstrap | `wp eval-file` (optional) |
+| 6. Smoke | HTTP gate | `GET /wp-json/` → expect 200 |
 
 ### `git_deploy`
 
@@ -126,8 +132,10 @@ For `ssh_scp_wpcli`, think:
 1. `check:generic` is the main trustworthy readiness/bootstrap gate.
 2. `whc_setup_remote` prepares remote Git repository wiring on cPanel.
 3. `git_deploy` triggers the cPanel deployment task for the requested `repository_root` and optional `branch`.
-4. `ssh_scp_wpcli` is the default mode for `mytho/source` and executes end-to-end: doctor → backup → SCP sync → WP-CLI bootstrap → DB migration → seed → smoke gate.
-5. DB migration follows WordPress standards: `wp search-replace` (dry-run first) → `wp cache flush` → `wp rewrite flush` → `wp transient delete --all`.
+4. `ssh_scp_wpcli` is the default mode and executes the full 6-phase pipeline end-to-end.
+5. SCP code sync **never deploys** `wp-config.php`, `.env`, `.htaccess`, `uploads/*`, or `cache/*` — protecting WHC staging from local config leaks.
+6. DB migration follows WordPress official standards: 9 steps including dry-run search-replace, cache/rewrite/transient cleanup, and SQL-level safety.
+7. Environment config bootstrap sets `WP_DEBUG` and related constants appropriately per environment.
 
 ## License
 
