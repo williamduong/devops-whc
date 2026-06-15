@@ -11,11 +11,26 @@ npm install -g devops-whc
 whc --help
 ```
 
-Or run directly with `npx`:
+Or run directly with `npx` (always uses latest version):
 
 ```powershell
 npx -y devops-whc --help
 ```
+
+### Upgrading from an older version
+
+```powershell
+# If installed globally:
+npm update -g devops-whc
+
+# Or force reinstall to latest:
+npm install -g devops-whc@latest
+
+# Verify version:
+whc --version
+```
+
+If you use `npx -y devops-whc` (recommended for VS Code / Copilot), you get the latest version automatically — no manual upgrade needed.
 
 ## What This Package Is For
 
@@ -91,13 +106,15 @@ The same commands also work with `npx -y devops-whc ...`.
 
 ## VS Code / Copilot Example
 
+Using `@latest` ensures you always get the newest version:
+
 ```jsonc
 {
   "servers": {
     "whc": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "devops-whc", "--serve"],
+      "args": ["-y", "devops-whc@latest", "--serve"],
       "env": {
         "WHC_ENV_FILE": "${workspaceFolder}/.env",
         "WHC_LOCAL_PROJECT_ROOT": "${workspaceFolder}",
@@ -107,6 +124,9 @@ The same commands also work with `npx -y devops-whc ...`.
     }
   }
 }
+```
+
+> 💡 `npx -y devops-whc@latest` always pulls the latest published version. No manual upgrade needed.
 ```
 
 ## Minimum Config Mindset
