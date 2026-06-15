@@ -250,12 +250,28 @@ export class WhcSshClient {
     target: KeySshTarget,
     localDir: string,
     remoteDir: string,
+    skipPatterns?: string[],
   ): Promise<SftpUploadResult> {
     const startedAt = Date.now();
     const privateKey = readFileSync(target.privateKeyPath);
-    const files = this.collectLocalFiles(localDir);
+    const allFiles = this.collectLocalFiles(localDir);
+    const files = skipPatterns && skipPatterns.length > 0
+      ? allFiles.filter((f) => {
+          const rel = relative(localDir, f).split(sep).join("/");
+          return !skipPatterns.some((pattern) => {
+            if (pattern.includes("*")) {
+              const regex = new RegExp("^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+              return regex.test(rel) || regex.test(f.split(/[/\\]/).pop()!);
+            }
+            return rel === pattern || f.split(/[/\\]/).pop() === pattern;
+          });
+        })
+      : allFiles;
     let uploaded = 0;
     let failed = 0;
+
+    const skipped = allFiles.length - files.length;
+    const skipNote = skipped > 0 ? ` (${skipped} file(s) skipped by pattern)` : "";
 
     return new Promise((resolve) => {
       const client = new Client();
@@ -291,7 +307,10 @@ export class WhcSshClient {
               .then((result) => {
                 clearTimeout(timeoutId);
                 client.end();
-                resolve(result);
+                resolve({
+                  ...result,
+                  message: result.message + skipNote,
+                });
               })
               .catch((uploadErr) => {
                 clearTimeout(timeoutId);
@@ -301,7 +320,7 @@ export class WhcSshClient {
                   latencyMs: Date.now() - startedAt,
                   uploaded,
                   failed: files.length - uploaded,
-                  message: uploadErr instanceof Error ? uploadErr.message : "SFTP upload failed",
+                  message: (uploadErr instanceof Error ? uploadErr.message : "SFTP upload failed") + skipNote,
                 });
               });
           });

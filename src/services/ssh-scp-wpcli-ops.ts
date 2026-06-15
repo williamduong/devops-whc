@@ -48,6 +48,7 @@ export interface SshScpWpCliPipelineResult {
   scpSync: ScpSyncResult;
   wpCliBootstrap: WpCliStepResult[];
   dbMigration?: DbMigrationResult;
+  envConfig?: EnvConfigResult;
   seedBootstrap?: SeedBootstrapResult;
   smokeGate?: SmokeGateResult;
   warnings: string[];
@@ -76,6 +77,37 @@ function wpCmd(path: string, command: string): string {
 
 // ── Phase 3: SCP Code Sync ──────────────────────────────────────────────────
 
+/**
+ * Files that must NEVER be deployed from local to WHC staging:
+ * - wp-config.php: local DB credentials — would break WHC staging
+ * - .env / .env.*: local secrets
+ * - .htaccess: server-specific rewrite rules (regenerated post-deploy)
+ * - wp-content/uploads/*: runtime content, WHC managed sync handles this
+ * - wp-content/cache/*: local cache, not relevant on staging
+ * - wp-content/upgrade/*: temporary upgrade files
+ * - wp-content/debug.log: local debug output
+ * - wp-content/object-cache.php: server-specific drop-in
+ * - .git / .gitignore / .gitattributes: version control
+ * - .whc: WHC local state
+ * - node_modules: dependencies
+ */
+const SCP_SKIP_PATTERNS = [
+  "wp-config.php",
+  ".env",
+  ".env.*",
+  ".htaccess",
+  "wp-content/uploads/*",
+  "wp-content/cache/*",
+  "wp-content/upgrade/*",
+  "wp-content/debug.log",
+  "wp-content/object-cache.php",
+  ".git",
+  ".gitignore",
+  ".gitattributes",
+  ".whc",
+  "node_modules",
+];
+
 export async function runScpCodeSync(
   config: AppConfig,
   sshClient: WhcSshClient,
@@ -95,7 +127,7 @@ export async function runScpCodeSync(
     ? `${remotePath.replace(/\/$/, "")}/${remoteSubDir.replace(/^\//, "")}`
     : remotePath;
 
-  const result: SftpUploadResult = await sshClient.sftpUploadDir(target, localDir, destPath);
+  const result: SftpUploadResult = await sshClient.sftpUploadDir(target, localDir, destPath, SCP_SKIP_PATTERNS);
   return {
     ok: result.ok,
     uploaded: result.uploaded,
@@ -422,6 +454,106 @@ export async function runSmokeGate(
   }
 }
 
+// ── Phase 4c: Environment Config Bootstrap (WHC-specific) ──────────────────
+
+export interface EnvConfigResult {
+  ok: boolean;
+  steps: WpCliStepResult[];
+}
+
+/**
+ * Apply environment-specific WordPress configuration after deploy.
+ * For WHC staging, this ensures safe defaults without touching DB credentials
+ * (which are managed by WHC's staging clone, stored in wp-config.php).
+ *
+ * Safe wp config set operations:
+ * - WP_DEBUG: false on staging (no public debug output)
+ * - WP_DEBUG_LOG: true (log to file for troubleshooting)
+ * - WP_DEBUG_DISPLAY: false (don't show errors on screen)
+ * - WP_DISABLE_FATAL_ERROR_HANDLER: false
+ * - WP_POST_REVISIONS: limit revisions on staging
+ *
+ * NOTE: We use `wp config set` which modifies wp-config.php directly.
+ * This is safe because WHC staging has its own wp-config.php — we're
+ * NOT overwriting it with the local version (SCP skip list prevents that).
+ */
+export async function runEnvConfigBootstrap(
+  config: AppConfig,
+  sshClient: WhcSshClient,
+  environment: "live" | "staging",
+): Promise<EnvConfigResult> {
+  const target = resolveStagingTarget(config);
+  const remotePath = resolveStagingPath(config);
+
+  if (!target || !remotePath) {
+    return {
+      ok: false,
+      steps: [{ ok: false, step: "env_config", message: "Staging target/path not configured." }],
+    };
+  }
+
+  const steps: WpCliStepResult[] = [];
+  const isProd = environment === "live";
+
+  // Only apply these on staging (production should be configured manually)
+  if (!isProd) {
+    const envSettings: Array<{ key: string; value: string; raw: boolean }> = [
+      { key: "WP_DEBUG", value: "false", raw: true },
+      { key: "WP_DEBUG_LOG", value: "true", raw: true },
+      { key: "WP_DEBUG_DISPLAY", value: "false", raw: true },
+      { key: "WP_DISABLE_FATAL_ERROR_HANDLER", value: "false", raw: true },
+    ];
+
+    for (const setting of envSettings) {
+      const rawFlag = setting.raw ? " --raw" : "";
+      const cmd = wpCmd(remotePath, `config set ${setting.key} '${setting.value}'${rawFlag} 2>&1`);
+      const result = await sshClient.execWithKey(target, cmd);
+      steps.push({
+        ok: result.ok,
+        step: `config_set:${setting.key}`,
+        message: result.ok
+          ? `${setting.key} = ${setting.value}`
+          : `${setting.key} failed: ${result.stderr || result.message}`,
+        stdout: result.stdout,
+      });
+    }
+  }
+
+  // Check that WP_HOME matches the expected domain
+  const expectedDomain = environment === "staging"
+    ? config.domains.staging
+    : config.domains.primary;
+
+  if (expectedDomain) {
+    const checkCmd = wpCmd(remotePath, `option get home 2>&1`);
+    const checkResult = await sshClient.execWithKey(target, checkCmd);
+    const currentHome = checkResult.ok ? checkResult.stdout.trim() : "";
+    const expectedUrl = expectedDomain.startsWith("http")
+      ? expectedDomain.replace(/\/+$/, "")
+      : `https://${expectedDomain}`;
+
+    if (currentHome !== expectedUrl) {
+      steps.push({
+        ok: false,
+        step: "config_verify:WP_HOME",
+        message: `WP_HOME mismatch: expected ${expectedUrl}, got ${currentHome}. Run DB migration first.`,
+      });
+    } else {
+      steps.push({
+        ok: true,
+        step: "config_verify:WP_HOME",
+        message: `WP_HOME verified: ${currentHome}`,
+        stdout: currentHome,
+      });
+    }
+  }
+
+  return {
+    ok: steps.every((s) => s.ok),
+    steps,
+  };
+}
+
 // ── Full Pipeline Orchestrator ──────────────────────────────────────────────
 
 export interface SshScpWpCliPipelineInput {
@@ -469,6 +601,9 @@ export async function runSshScpWpCliPipeline(
     dbMigration = await runDbMigration(config, sshClient, input.dbOldUrl, input.dbNewUrl);
   }
 
+  // Phase 4c: Environment config bootstrap (WP_DEBUG, etc.)
+  const envConfig = await runEnvConfigBootstrap(config, sshClient, input.smokeEnvironment ?? "staging");
+
   // Phase 5: Seed/bootstrap
   let seedBootstrap: SeedBootstrapResult | undefined;
   if (input.seedScriptPath) {
@@ -485,6 +620,7 @@ export async function runSshScpWpCliPipeline(
     scpSync.ok &&
     wpCliBootstrap.every((s) => s.ok) &&
     (!dbMigration || dbMigration.ok) &&
+    envConfig.ok &&
     (!seedBootstrap || seedBootstrap.ok) &&
     (!smokeGate || smokeGate.ok);
 
@@ -493,6 +629,7 @@ export async function runSshScpWpCliPipeline(
     scpSync,
     wpCliBootstrap,
     dbMigration,
+    envConfig,
     seedBootstrap,
     smokeGate,
     warnings,
