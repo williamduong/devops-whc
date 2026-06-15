@@ -428,20 +428,23 @@ describe("executeWhcDeploy", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.outcome).toBe("dry_run_preview");
-    expect(result.data?.warnings.some((warning) => warning.includes("project-local pipeline script"))).toBe(true);
+    expect(result.data?.phase_coverage.code_state).toBe("excluded");
+    expect(result.data?.phase_coverage.runtime_state).toBe("excluded");
+    expect(result.data?.phase_coverage.data_state).toBe("excluded");
+    expect(result.data?.phase_coverage.deployment_state).toBe("excluded");
   });
 
-  it("blocks real ssh_scp_wpcli deploy until the execution path is implemented", async () => {
+  it("executes ssh_scp_wpcli pipeline and reports failures when staging is not configured", async () => {
     const result = await executeWhcDeploy(
       {
         ...baseConfig,
         workflowMode: "ssh_scp_wpcli",
       },
       {
-        request_id: "r-ssh-blocked",
+        request_id: "r-ssh-noconfig",
         actor: { kind: "copilot" },
         confirmed: true,
-        idempotency_key: "idem-ssh-blocked",
+        idempotency_key: "idem-ssh-noconfig",
         payload: {
           workflow_mode: "ssh_scp_wpcli",
           target_environment: "staging",
@@ -453,8 +456,9 @@ describe("executeWhcDeploy", () => {
       { uapiClient: mockUapiClient() },
     );
 
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("BUSINESS_POLICY_BLOCKED");
-    expect(result.error?.message).toMatch(/execution is not implemented/);
+    // Should report the result (not block), pipeline may partially fail due to missing config
+    expect(result.data?.pipeline_result).toBeDefined();
+    expect(result.data?.phase_coverage.runtime_state).toBe("included");
+    expect(result.data?.phase_coverage.data_state).toBe("included");
   });
 });

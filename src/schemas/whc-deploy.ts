@@ -23,6 +23,11 @@ const payloadSchema = z.object({
   verify_after_deploy: z.boolean().optional(),
   auto_rollback_on_verify_failure: z.boolean().optional(),
   lock_key: z.string().min(1).optional(),
+
+  // ssh_scp_wpcli pipeline inputs
+  plugins_to_activate: z.array(z.string().min(1)).optional(),
+  theme_to_activate: z.string().min(1).optional(),
+  seed_script_path: z.string().min(1).optional(),
 }).superRefine((payload, ctx) => {
   if (payload.workflow_mode === "git_deploy" && !payload.repository_root) {
     ctx.addIssue({

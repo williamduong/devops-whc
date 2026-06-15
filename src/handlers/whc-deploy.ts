@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { AppConfig } from "../config/env";
 import { ToolResponseEnvelope } from "../contracts/envelope";
 import { WhcDeployRequest } from "../schemas/whc-deploy";
@@ -6,6 +7,7 @@ import { WhcUapiClient } from "../clients/whc-uapi-client";
 import { DeploymentLockService, InMemoryDeploymentLockService } from "../services/deployment-locks";
 import { WhcSshClient } from "../clients/ssh-client";
 import { runDeployRollback, runDeployVerification } from "../services/deploy-runtime-ops";
+import { runSshScpWpCliPipeline, SshScpWpCliPipelineResult } from "../services/ssh-scp-wpcli-ops";
 
 export type DeployOutcome = "deployment_triggered" | "dry_run_preview";
 
@@ -30,6 +32,7 @@ export interface WhcDeployData {
     deployment_state: "included" | "excluded";
     notes: string[];
   };
+  pipeline_result?: SshScpWpCliPipelineResult;
   warnings: string[];
 }
 
@@ -105,17 +108,24 @@ export async function executeWhcDeploy(
   }
 
   if (workflow_mode === "ssh_scp_wpcli") {
-    const sourceScriptHint = [
-      "ssh_scp_wpcli execution is not implemented in whc_deploy yet.",
-      "This workflow is modeled after mytho/source where deploy is:",
-      "1. doctor",
-      "2. backup",
-      "3. scp code sync",
-      "4. wp-cli runtime bootstrap",
-      "5. wp eval-file seed/bootstrap",
-      "6. HTTP/API smoke",
-      "Use the project-local pipeline script for real execution until source-specific deploy integration lands.",
-    ].join("\n");
+    // Staging-first policy for ssh_scp_wpcli
+    if ((config.safety.enforceStagingFirst ?? true) && target_environment === "live" && release_intent !== "promote") {
+      return buildErrorResponse(
+        actionIdFactory(),
+        startedAt,
+        effectiveSafetyLevel,
+        "BUSINESS_POLICY_BLOCKED",
+        [
+          "Staging-first policy: direct live ssh_scp_wpcli deployment is blocked.",
+          "Only release_intent='promote' is allowed when target_environment='live'.",
+        ].join("\n"),
+      );
+    }
+
+    // Resolve source dir from source_profile
+    const localSourceDir = source_profile.local_project_root && source_profile.local_app_path
+      ? join(source_profile.local_project_root, source_profile.local_app_path)
+      : source_profile.local_project_root ?? undefined;
 
     if (request.dry_run) {
       const phaseCoverage = buildPhaseCoverage({
@@ -137,7 +147,7 @@ export async function executeWhcDeploy(
           backup_reference,
           pipeline_status: derivePipelineStatus(phaseCoverage, workflow_mode),
           phase_coverage: phaseCoverage,
-          warnings: [...warnings, sourceScriptHint],
+          warnings,
         },
         error: null,
         meta: {
@@ -152,13 +162,115 @@ export async function executeWhcDeploy(
       };
     }
 
-    return buildErrorResponse(
-      actionIdFactory(),
-      startedAt,
-      effectiveSafetyLevel,
-      "BUSINESS_POLICY_BLOCKED",
-      sourceScriptHint,
-    );
+    const lockAcquired = lockService.acquire(deployLockKey, lockOwner);
+    if (!lockAcquired.ok) {
+      return buildErrorResponse(
+        actionIdFactory(),
+        startedAt,
+        effectiveSafetyLevel,
+        "BUSINESS_POLICY_BLOCKED",
+        `Concurrent deployment blocked: ${lockAcquired.reason}`,
+      );
+    }
+
+    try {
+      // Resolve DB URLs for migration
+      const dbOldUrl = config.domains.primary ?? undefined;
+      const dbNewUrl = target_environment === "staging"
+        ? config.domains.staging ?? undefined
+        : config.domains.primary ?? undefined;
+
+      const pipelineResult = await runSshScpWpCliPipeline(config, sshClient, {
+        localSourceDir,
+        pluginsToActivate: request.payload.plugins_to_activate,
+        themeToActivate: request.payload.theme_to_activate,
+        dbOldUrl,
+        dbNewUrl,
+        seedScriptPath: request.payload.seed_script_path,
+        runSmoke: true,
+        smokeEnvironment: target_environment,
+      });
+
+      warnings.push(...pipelineResult.warnings);
+
+      const verifyStatus: "skipped" | "passed" | "failed" = pipelineResult.ok ? "passed" : "failed";
+
+      const phaseCoverage = buildPhaseCoverage({
+        workflowMode: workflow_mode,
+        verifyStatus,
+        dryRun: false,
+      });
+
+      if (!pipelineResult.ok) {
+        return {
+          ok: false,
+          action_id: actionIdFactory(),
+          tool: "whc_deploy",
+          data: {
+            outcome: "deployment_triggered",
+            workflow_mode,
+            target_environment,
+            direction,
+            sync_scope,
+            lock_key: deployLockKey,
+            backup_reference,
+            verify_status: verifyStatus,
+            rollback_status: "not_needed",
+            pipeline_status: derivePipelineStatus(phaseCoverage, workflow_mode),
+            phase_coverage: phaseCoverage,
+            pipeline_result: pipelineResult,
+            warnings,
+          },
+          error: {
+            code: "TEMPORARY_UPSTREAM_ERROR",
+            message: "ssh_scp_wpcli pipeline completed with failures. See pipeline_result for details.",
+            retryable: true,
+          },
+          meta: {
+            latency_ms: Date.now() - startedAt,
+            safety_level: effectiveSafetyLevel,
+            workflow_mode,
+            pipeline_id,
+            release_intent,
+            source_profile,
+            delivery_mechanism: "file_transfer",
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        action_id: actionIdFactory(),
+        tool: "whc_deploy",
+        data: {
+          outcome: "deployment_triggered",
+          workflow_mode,
+          target_environment,
+          direction,
+          sync_scope,
+          lock_key: deployLockKey,
+          backup_reference,
+          verify_status: verifyStatus,
+          rollback_status: "not_needed",
+          pipeline_status: derivePipelineStatus(phaseCoverage, workflow_mode),
+          phase_coverage: phaseCoverage,
+          pipeline_result: pipelineResult,
+          warnings,
+        },
+        error: null,
+        meta: {
+          latency_ms: Date.now() - startedAt,
+          safety_level: effectiveSafetyLevel,
+          workflow_mode,
+          pipeline_id,
+          release_intent,
+          source_profile,
+          delivery_mechanism: "file_transfer",
+        },
+      };
+    } finally {
+      lockService.release(deployLockKey, lockOwner);
+    }
   }
 
   if (direction || sync_scope) {
@@ -328,20 +440,43 @@ function buildPhaseCoverage(input: {
 }): WhcDeployData["phase_coverage"] {
   const notes: string[] = [];
 
+  if (input.workflowMode === "ssh_scp_wpcli") {
+    const codeState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
+    const runtimeState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
+    const dataState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
+    const deploymentState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
+
+    notes.push(
+      "ssh_scp_wpcli covers SCP code sync, WP-CLI runtime bootstrap, DB migration (search-replace + cache flush + rewrite flush + transient cleanup), seed/bootstrap, and HTTP smoke gate.",
+    );
+
+    if (input.verifyStatus === "passed") {
+      notes.push("All pipeline phases passed.");
+    }
+    if (input.verifyStatus === "failed") {
+      notes.push("One or more pipeline phases failed.");
+    }
+    if (input.dryRun) {
+      notes.push("dry_run preview only; no target state has been changed.");
+    }
+
+    return {
+      code_state: codeState,
+      runtime_state: runtimeState,
+      data_state: dataState,
+      deployment_state: deploymentState,
+      notes,
+    };
+  }
+
+  // git_deploy mode
   const codeState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
   const deploymentState: "included" | "excluded" = input.dryRun ? "excluded" : "included";
 
-  if (input.workflowMode === "git_deploy") {
-    notes.push(
-      "git_deploy triggers a cPanel deployment task for repository-managed code delivery.",
-      "git_deploy does not bootstrap WordPress runtime/data; use separate runtime checks or project-specific scripts for that layer.",
-    );
-  } else {
-    notes.push(
-      "ssh_scp_wpcli is expected to cover code sync, WP-CLI runtime bootstrap, seed/bootstrap, and smoke gating.",
-      "whc_deploy does not execute that source-specific flow yet; use a project-local pipeline script for real runs today.",
-    );
-  }
+  notes.push(
+    "git_deploy triggers a cPanel deployment task for repository-managed code delivery.",
+    "git_deploy does not bootstrap WordPress runtime/data; use separate runtime checks or project-specific scripts for that layer.",
+  );
 
   if (input.verifyStatus === "passed") {
     notes.push("Post-deploy verification passed.");
