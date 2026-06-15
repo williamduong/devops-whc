@@ -106,7 +106,7 @@ Current boundary:
 1. `whc_setup_remote` is ready for remote Git repository setup.
 2. `check:generic` is the main trustworthy readiness gate for both workflow modes.
 3. `whc_deploy` for `git_deploy` triggers the real cPanel deployment task for a given `repository_root` and optional `branch`.
-4. `whc_deploy` does not yet execute the full `ssh_scp_wpcli` runtime pipeline; keep that in project-local scripts for now.
+4. `whc_deploy` for `ssh_scp_wpcli` executes end-to-end: SCP sync → WP-CLI bootstrap → DB migration (search-replace + cache flush + rewrite flush + transient cleanup) → seed → smoke gate.
 
 ## 3. Required Context Before Any Write
 

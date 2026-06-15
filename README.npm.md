@@ -126,8 +126,8 @@ For `ssh_scp_wpcli`, think:
 1. `check:generic` is the main trustworthy readiness/bootstrap gate.
 2. `whc_setup_remote` prepares remote Git repository wiring on cPanel.
 3. `git_deploy` triggers the cPanel deployment task for the requested `repository_root` and optional `branch`.
-4. `ssh_scp_wpcli` is still the correct default mindset for `mytho/source`.
-5. `whc_deploy` does not yet execute the full `ssh_scp_wpcli` runtime pipeline end to end; keep that in project-local scripts.
+4. `ssh_scp_wpcli` is the default mode for `mytho/source` and executes end-to-end: doctor → backup → SCP sync → WP-CLI bootstrap → DB migration → seed → smoke gate.
+5. DB migration follows WordPress standards: `wp search-replace` (dry-run first) → `wp cache flush` → `wp rewrite flush` → `wp transient delete --all`.
 
 ## License
 
